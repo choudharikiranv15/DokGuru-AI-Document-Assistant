@@ -64,9 +64,9 @@ RUN mkdir -p \
     templates \
     static
 
-# Copy templates if they exist
-COPY templates/ ./templates/ 2>/dev/null || :
-COPY static/ ./static/ 2>/dev/null || :
+# Copy templates and static files (directories already exist in repo)
+COPY templates/ ./templates/
+COPY static/ ./static/
 
 # ============================================================================
 # SET PERMISSIONS
