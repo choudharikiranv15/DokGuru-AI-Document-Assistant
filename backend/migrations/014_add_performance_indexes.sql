@@ -10,23 +10,44 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 -- PostgreSQL automatically creates index on primary keys, so this is redundant
 -- but included for documentation purposes
 
--- Index on usage_events for analytics queries
-CREATE INDEX IF NOT EXISTS idx_usage_events_user_id ON usage_events(user_id);
-CREATE INDEX IF NOT EXISTS idx_usage_events_event_type ON usage_events(event_type);
-CREATE INDEX IF NOT EXISTS idx_usage_events_created_at ON usage_events(created_at);
--- Composite index for common query pattern (user_id + event_type)
-CREATE INDEX IF NOT EXISTS idx_usage_events_user_event ON usage_events(user_id, event_type);
+-- Index on usage_events for analytics queries (skip created_at if column doesn't exist)
+DO $$
+BEGIN
+    CREATE INDEX IF NOT EXISTS idx_usage_events_user_id ON usage_events(user_id);
+    CREATE INDEX IF NOT EXISTS idx_usage_events_event_type ON usage_events(event_type);
+    
+    -- Only create created_at index if column exists
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='usage_events' AND column_name='created_at') THEN
+        CREATE INDEX IF NOT EXISTS idx_usage_events_created_at ON usage_events(created_at);
+    END IF;
+    
+    -- Composite index for common query pattern (user_id + event_type)
+    CREATE INDEX IF NOT EXISTS idx_usage_events_user_event ON usage_events(user_id, event_type);
+END $$;
 
 -- Index on documents table
-CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
-CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents(created_at);
--- Index for document name searches
-CREATE INDEX IF NOT EXISTS idx_documents_document_name ON documents(document_name);
+DO $$
+BEGIN
+    CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
+    
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='documents' AND column_name='created_at') THEN
+        CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents(created_at);
+    END IF;
+    
+    -- Index for document name searches
+    CREATE INDEX IF NOT EXISTS idx_documents_document_name ON documents(document_name);
+END $$;
 
 -- Index on feedback table
-CREATE INDEX IF NOT EXISTS idx_feedback_user_id ON feedback(user_id);
-CREATE INDEX IF NOT EXISTS idx_feedback_message_id ON feedback(message_id);
-CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at);
+DO $$
+BEGIN
+    CREATE INDEX IF NOT EXISTS idx_feedback_user_id ON feedback(user_id);
+    CREATE INDEX IF NOT EXISTS idx_feedback_message_id ON feedback(message_id);
+    
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='feedback' AND column_name='created_at') THEN
+        CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at);
+    END IF;
+END $$;
 
 -- Index on user_plans table
 CREATE INDEX IF NOT EXISTS idx_user_plans_user_id ON user_plans(user_id);
@@ -42,8 +63,16 @@ CREATE INDEX IF NOT EXISTS idx_email_verifications_token ON email_verifications(
 CREATE INDEX IF NOT EXISTS idx_email_verifications_email ON email_verifications(email);
 
 -- Index on site_feedback table (if exists)
-CREATE INDEX IF NOT EXISTS idx_site_feedback_user_id ON site_feedback(user_id);
-CREATE INDEX IF NOT EXISTS idx_site_feedback_created_at ON site_feedback(created_at);
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='site_feedback') THEN
+        CREATE INDEX IF NOT EXISTS idx_site_feedback_user_id ON site_feedback(user_id);
+        
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='site_feedback' AND column_name='created_at') THEN
+            CREATE INDEX IF NOT EXISTS idx_site_feedback_created_at ON site_feedback(created_at);
+        END IF;
+    END IF;
+END $$;
 
 -- ============================================================================
 -- Performance Notes:
