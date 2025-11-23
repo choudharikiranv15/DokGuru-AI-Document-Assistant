@@ -16,7 +16,7 @@
 
 services:
   - type: web
-    name: DokGuru-voice-api
+    name: DokGuru-voice-api-docker
     # ========================================================================
     # DOCKER CONFIGURATION (Builds from base image with app code)
     # ========================================================================
