@@ -97,9 +97,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # ============================================================================
 # STARTUP COMMAND
 # ============================================================================
-# Use app_minimal.py for faster startup or app.py for full features
+# Use app_minimal.py for faster startup and lower memory usage (required for free tier)
 # Render will override PORT via environment variable
-CMD gunicorn --bind 0.0.0.0:$PORT app:app -c gunicorn.conf.py
+CMD gunicorn --bind 0.0.0.0:$PORT app_minimal:app -c gunicorn.conf.py
 
 # ============================================================================
 # IMAGE INFO

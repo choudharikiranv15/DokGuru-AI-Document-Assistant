@@ -465,6 +465,7 @@ def add_sentry_context():
 
 # ============= ROUTES =============
 @app.route('/')
+@limiter.exempt  # Health checks should not be rate limited
 def index():
     return render_template('index.html')
 

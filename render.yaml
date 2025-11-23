@@ -120,6 +120,12 @@ services:
         value: 5
       - key: QUERY_CACHE_TTL
         value: 3600
+      
+      # Memory optimization for free tier (512MB limit)
+      - key: DISABLE_VECTOR_DB
+        value: true
+      - key: DISABLE_ML_MODELS
+        value: true
 
     # ========================================================================
     # HEALTH CHECK
