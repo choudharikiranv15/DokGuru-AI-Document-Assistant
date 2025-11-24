@@ -189,13 +189,30 @@ except Exception as e:
 try:
     redis_url = os.getenv('REDIS_URL')  # Redis Cloud: redis://user:pass@host:port
     storage_uri = redis_url if redis_url else "memory://"
+    
+    # Add connection pooling and retry settings for Redis
+    storage_options = {}
+    if redis_url:
+        storage_options = {
+            "socket_connect_timeout": 5,
+            "socket_keepalive": True,
+            "socket_keepalive_options": {
+                1: 1,  # TCP_KEEPIDLE
+                2: 1,  # TCP_KEEPINTVL
+                3: 3   # TCP_KEEPCNT
+            },
+            "retry_on_timeout": True,
+            "health_check_interval": 30
+        }
 
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
         storage_uri=storage_uri,
+        storage_options=storage_options,
         default_limits=["200 per day", "50 per hour"],  # Default limits for all endpoints
-        strategy="fixed-window"
+        strategy="fixed-window",
+        swallow_errors=True  # Don't crash on Redis errors
     )
     logger.info(f"✓ Rate limiter initialized with {storage_uri}")
 except Exception as e:
@@ -206,6 +223,8 @@ except Exception as e:
             def decorator(f):
                 return f
             return decorator
+        def exempt(self, f):
+            return f
     limiter = DummyLimiter()
 
 # Log rate limiter storage type
