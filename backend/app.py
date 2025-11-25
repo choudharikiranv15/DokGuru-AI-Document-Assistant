@@ -178,7 +178,17 @@ csp = {
 # CORS Configuration - MUST be initialized BEFORE Talisman (non-fatal)
 # Otherwise Talisman intercepts OPTIONS preflight requests
 try:
-    cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://localhost:5174,http://localhost:3000').split(',')
+    # Default CORS origins include Cloud Run URL + localhost for development
+    default_origins = (
+        'https://dokguru-backend-739437500880.asia-south1.run.app,'
+        'http://localhost:5173,http://localhost:5174,http://localhost:3000,'
+        'http://localhost:8080'
+    )
+    cors_origins = os.getenv('CORS_ORIGINS', default_origins).split(',')
+
+    # Log CORS configuration
+    logger.info(f"CORS enabled for origins: {cors_origins}")
+
     CORS(app, resources={
         r"/*": {
             "origins": cors_origins,
@@ -520,6 +530,18 @@ def add_sentry_context():
 @limiter.exempt  # Health checks should not be rate limited
 def index():
     return render_template('index.html')
+
+@app.route('/health')
+@limiter.exempt
+def health_check():
+    """Health check endpoint for Cloud Run"""
+    import time
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': time.time(),
+        'service': 'dokguru-backend',
+        'version': '2.0-streaming'
+    }), 200
 
 @app.route('/voice-test')
 def voice_test():
