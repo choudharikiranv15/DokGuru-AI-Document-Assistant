@@ -8,6 +8,7 @@ import Sidebar from './components/layout/Sidebar'
 import BrowserWarning from './components/common/BrowserWarning'
 import OnboardingTutorial from './components/common/OnboardingTutorial'
 import FeedbackButton from './components/feedback/FeedbackButton'
+import ErrorBoundary from './components/common/ErrorBoundary'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -99,7 +100,7 @@ function App() {
     }, [initializeAuth])
 
     return (
-        <>
+        <ErrorBoundary>
             <Toaster
                 position="top-right"
                 toastOptions={{
@@ -156,8 +157,9 @@ function App() {
                 />
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-        </>
+        </ErrorBoundary>
     )
 }
 
 export default App
+

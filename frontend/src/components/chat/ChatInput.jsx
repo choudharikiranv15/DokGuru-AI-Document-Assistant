@@ -117,7 +117,13 @@ export default function ChatInput({ setIsThinking }) {
 
         return () => {
             if (recognitionRef.current) {
+                // Cleanup: remove event listeners to prevent memory leaks
+                recognitionRef.current.onstart = null
+                recognitionRef.current.onresult = null
+                recognitionRef.current.onerror = null
+                recognitionRef.current.onend = null
                 recognitionRef.current.stop()
+                recognitionRef.current = null
             }
         }
     }, [])

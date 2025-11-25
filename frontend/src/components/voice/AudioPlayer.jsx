@@ -25,6 +25,22 @@ export default function AudioPlayer({ audioUrl }) {
         }
     }, [])
 
+    // Cleanup audio when URL changes to prevent memory leaks
+    useEffect(() => {
+        const audio = audioRef.current
+        if (!audio) return
+
+        return () => {
+            // Pause and reset audio element
+            audio.pause()
+            audio.src = ''
+            audio.load()
+            setIsPlaying(false)
+            setCurrentTime(0)
+            setDuration(0)
+        }
+    }, [audioUrl])
+
     const togglePlay = () => {
         const audio = audioRef.current
         if (!audio) return

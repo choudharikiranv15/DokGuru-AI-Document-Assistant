@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, memo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import SpotifyAudioPlayer from '../voice/SpotifyAudioPlayer'
 import ReactMarkdown from 'react-markdown'
@@ -7,7 +7,7 @@ import { textToSpeech } from '../../services/api'
 import { toast } from 'react-hot-toast'
 import api from '../../services/api'
 
-export default function Message({ message }) {
+function Message({ message }) {
     const isUser = message.role === 'user'
     const [audioUrl, setAudioUrl] = useState(message.audioUrl || null)
     const [isGeneratingAudio, setIsGeneratingAudio] = useState(message.audioGenerating || false)
@@ -68,10 +68,8 @@ export default function Message({ message }) {
     }, [isGeneratingAudio, audioUrl, audioReady])
 
     const handleGenerateSpeech = async () => {
+        // Don't regenerate if audio already exists
         if (audioUrl && audioReady) {
-            // Toggle audio playback or clear
-            setAudioUrl(null)
-            setAudioReady(false)
             return
         }
 
@@ -244,8 +242,8 @@ export default function Message({ message }) {
                         </div>
                     )}
 
-                    {/* TTS Button for AI Messages */}
-                    {!isUser && (
+                    {/* TTS Button for AI Messages - Only show if no audio is being generated or ready */}
+                    {!isUser && !audioUrl && !audioReady && !isGeneratingAudio && (
                         <motion.div
                             initial={{ opacity: 0, y: 5 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -253,106 +251,147 @@ export default function Message({ message }) {
                             className="mt-3 flex items-center gap-2"
                         >
                             <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
                                 onClick={handleGenerateSpeech}
-                                disabled={isGeneratingAudio}
-                                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white text-sm rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-cyan-500/30"
+                                className="group relative flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium rounded-xl transition-all duration-300 overflow-hidden bg-gradient-to-r from-cyan-500/10 to-blue-500/10 hover:from-cyan-500/20 hover:to-blue-500/20 text-cyan-300 border border-cyan-500/30 hover:border-cyan-400/50"
+                                title="Generate audio"
                             >
-                                {isGeneratingAudio ? (
-                                    <>
-                                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                        </svg>
-                                        Generating...
-                                    </>
-                                ) : audioUrl ? (
-                                    <>
-                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d="M6 6h12v12H6z" />
-                                        </svg>
-                                        Hide Audio
-                                    </>
-                                ) : (
-                                    <>
-                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-                                        </svg>
-                                        Listen
-                                    </>
-                                )}
+                                {/* Background shimmer effect */}
+                                <motion.div
+                                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent"
+                                    animate={{
+                                        x: ['-100%', '100%']
+                                    }}
+                                    transition={{
+                                        duration: 2,
+                                        repeat: Infinity,
+                                        repeatDelay: 1
+                                    }}
+                                />
+
+                                <motion.svg
+                                    className="w-4 h-4"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                    whileHover={{ scale: 1.1 }}
+                                    transition={{ type: "spring", stiffness: 400 }}
+                                >
+                                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                                </motion.svg>
+                                <span className="relative z-10">Generate Audio</span>
                             </motion.button>
                         </motion.div>
                     )}
 
-                    {/* Audio Player with Spotify Waveforms or Generating Animation */}
-                    {!isUser && (
+                    {/* Synthesizing Voice Animation or Audio Player */}
+                    {!isUser && (isGeneratingAudio || audioUrl) && (
                         <AnimatePresence mode="wait">
                             {isGeneratingAudio && (
                                 <motion.div
                                     key="generating"
-                                    initial={{ opacity: 0, scale: 0.95 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.95 }}
-                                    className="mt-3 p-4 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 rounded-lg border border-cyan-500/20"
+                                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                                    className="mt-3 relative overflow-hidden"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        {/* Animated Sound Waves */}
-                                        <div className="flex items-center gap-1">
-                                            {[0, 1, 2, 3, 4].map((i) => (
-                                                <motion.div
-                                                    key={i}
-                                                    className="w-1 bg-gradient-to-t from-cyan-500 to-purple-500 rounded-full"
-                                                    animate={{
-                                                        height: [8, 20, 8],
-                                                    }}
-                                                    transition={{
-                                                        duration: 0.8,
-                                                        repeat: Infinity,
-                                                        delay: i * 0.1,
-                                                        ease: "easeInOut"
-                                                    }}
-                                                />
-                                            ))}
-                                        </div>
+                                    {/* Gradient border container */}
+                                    <div className="relative p-5 bg-gradient-to-r from-cyan-500/10 via-purple-500/10 to-pink-500/10 rounded-2xl border border-cyan-500/20 backdrop-blur-sm">
+                                        {/* Animated gradient background */}
+                                        <motion.div
+                                            className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-purple-500/5 to-pink-500/5"
+                                            animate={{
+                                                backgroundPosition: ['0% 50%', '100% 50%', '0% 50%']
+                                            }}
+                                            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                                            style={{ backgroundSize: '200% 200%' }}
+                                        />
 
-                                        {/* Text Animation */}
-                                        <div className="flex-1">
-                                            <motion.div
-                                                className="flex items-center gap-2"
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                            >
-                                                <svg className="w-4 h-4 text-cyan-400 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-                                                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-                                                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-                                                </svg>
-                                                <span className="text-sm text-cyan-300 font-medium">
-                                                    Synthesizing voice
-                                                    <motion.span
-                                                        animate={{ opacity: [0, 1, 0] }}
+                                        <div className="relative z-10 flex items-center gap-4">
+                                            {/* Enhanced Animated Sound Waves */}
+                                            <div className="flex items-center gap-1.5">
+                                                {[0, 1, 2, 3, 4].map((i) => (
+                                                    <motion.div
+                                                        key={i}
+                                                        className="w-1.5 rounded-full"
+                                                        style={{
+                                                            background: 'linear-gradient(to top, #06b6d4, #a855f7, #ec4899)'
+                                                        }}
+                                                        animate={{
+                                                            height: [10, 28, 10],
+                                                            opacity: [0.5, 1, 0.5]
+                                                        }}
+                                                        transition={{
+                                                            duration: 0.8,
+                                                            repeat: Infinity,
+                                                            delay: i * 0.12,
+                                                            ease: "easeInOut"
+                                                        }}
+                                                    />
+                                                ))}
+                                            </div>
+
+                                            {/* Text Animation */}
+                                            <div className="flex-1">
+                                                <motion.div
+                                                    className="flex items-center gap-2.5"
+                                                    initial={{ opacity: 0, x: -10 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    transition={{ delay: 0.1 }}
+                                                >
+                                                    <motion.svg
+                                                        className="w-5 h-5 text-cyan-400"
+                                                        fill="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                        animate={{ scale: [1, 1.1, 1] }}
                                                         transition={{ duration: 1.5, repeat: Infinity }}
                                                     >
-                                                        ...
-                                                    </motion.span>
-                                                </span>
-                                            </motion.div>
-                                            <p className="text-xs text-gray-400 mt-1">
-                                                Audio will be ready in a moment
-                                            </p>
-                                        </div>
+                                                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+                                                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+                                                    </motion.svg>
+                                                    <div>
+                                                        <div className="flex items-baseline gap-1">
+                                                            <span className="text-sm text-cyan-300 font-semibold">
+                                                                Synthesizing voice
+                                                            </span>
+                                                            <motion.span
+                                                                className="text-sm text-cyan-300 font-semibold"
+                                                                animate={{ opacity: [0, 1, 0] }}
+                                                                transition={{ duration: 1.5, repeat: Infinity }}
+                                                            >
+                                                                ...
+                                                            </motion.span>
+                                                        </div>
+                                                        <p className="text-xs text-gray-400 mt-0.5">
+                                                            Creating high-quality audio for you
+                                                        </p>
+                                                    </div>
+                                                </motion.div>
+                                            </div>
 
-                                        {/* Spinning Circle Progress */}
-                                        <motion.div
-                                            className="w-8 h-8 rounded-full border-2 border-cyan-500/30 border-t-cyan-500"
-                                            animate={{ rotate: 360 }}
-                                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                                        />
+                                            {/* Enhanced Spinning Circle Progress */}
+                                            <div className="relative">
+                                                <motion.div
+                                                    className="w-10 h-10 rounded-full border-2 border-cyan-500/20"
+                                                    animate={{ rotate: 360 }}
+                                                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                                                />
+                                                <motion.div
+                                                    className="absolute inset-0 w-10 h-10 rounded-full border-2 border-transparent border-t-cyan-400 border-r-purple-400"
+                                                    animate={{ rotate: 360 }}
+                                                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                                                />
+                                                <motion.div
+                                                    className="absolute inset-2 w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20"
+                                                    animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0.8, 0.5] }}
+                                                    transition={{ duration: 1.5, repeat: Infinity }}
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
                                 </motion.div>
                             )}
-                            {audioReady && audioUrl && (
+                            {!isGeneratingAudio && audioUrl && (
                                 <motion.div
                                     key="player"
                                     initial={{ opacity: 0, y: 10 }}
@@ -435,3 +474,11 @@ export default function Message({ message }) {
         </motion.div>
     )
 }
+
+// Memoize component to prevent unnecessary re-renders when message hasn't changed
+export default memo(Message, (prevProps, nextProps) => {
+    // Only re-render if message content hasn't changed
+    return prevProps.message.id === nextProps.message.id &&
+           prevProps.message.timestamp === nextProps.message.timestamp &&
+           prevProps.message.text === nextProps.message.text
+})

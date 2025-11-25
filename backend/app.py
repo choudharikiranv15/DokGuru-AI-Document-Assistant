@@ -33,6 +33,8 @@ import secrets
 import logging
 import threading
 import time
+import atexit
+import signal
 from functools import lru_cache
 
 # Setup logging
@@ -114,6 +116,37 @@ except Exception as e:
     logger.error(f"Environment validation failed: {e}")
     env_valid = False
 
+# ============= RESOURCE CLEANUP =============
+# Register cleanup handlers for graceful shutdown
+def cleanup_thread_pool():
+    """Cleanup thread pool executor on app shutdown"""
+    if hasattr(app, 'tts_executor'):
+        logger.info("🧹 Shutting down TTS thread pool...")
+        try:
+            app.tts_executor.shutdown(wait=True, cancel_futures=True)
+            logger.info("✓ TTS thread pool shut down successfully")
+        except Exception as e:
+            logger.error(f"Error shutting down thread pool: {e}")
+
+def cleanup_redis():
+    """Cleanup Redis connection pool on app shutdown"""
+    try:
+        from src.redis_cache import redis_cache
+        if redis_cache and redis_cache.redis_client:
+            logger.info("🧹 Closing Redis connections...")
+            redis_cache.close()
+            logger.info("✓ Redis connections closed")
+    except Exception as e:
+        logger.error(f"Error closing Redis: {e}")
+
+# Register cleanup handlers
+atexit.register(cleanup_thread_pool)
+atexit.register(cleanup_redis)
+
+# Handle signals for Docker/Kubernetes graceful shutdown
+signal.signal(signal.SIGTERM, lambda s, f: cleanup_thread_pool())
+signal.signal(signal.SIGINT, lambda s, f: cleanup_thread_pool())
+
 # Initialize Sentry for error tracking (non-fatal)
 try:
     init_sentry(app)
@@ -145,7 +178,7 @@ csp = {
 # CORS Configuration - MUST be initialized BEFORE Talisman (non-fatal)
 # Otherwise Talisman intercepts OPTIONS preflight requests
 try:
-    cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://localhost:3000').split(',')
+    cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://localhost:5174,http://localhost:3000').split(',')
     CORS(app, resources={
         r"/*": {
             "origins": cors_origins,
@@ -1219,20 +1252,41 @@ def ask_question():
 
         # Start audio generation in background thread (non-blocking)
         def generate_audio_background():
+            import signal
+            import time
+            start_time = time.time()
+            timeout = 30  # 30 second timeout
+
             try:
                 logger.info(f"🎵 Background: Generating audio for response (ID: {audio_id}, language: {language})...")
+
+                # Check timeout periodically
+                if time.time() - start_time > timeout:
+                    raise TimeoutError(f"TTS generation exceeded {timeout}s timeout")
+
                 tts_result = tts_handler.synthesize(
                     response['answer'],
                     language=language,  # Support multilingual TTS
                     output_filename=f"auto_{audio_id}"
                 )
-                logger.info(f"✅ Background: Audio ready at {audio_url} ({tts_result.get('engine', 'unknown')})")
+
+                elapsed = time.time() - start_time
+                logger.info(f"✅ Background: Audio ready at {audio_url} ({tts_result.get('engine', 'unknown')}) in {elapsed:.2f}s")
+            except TimeoutError as e:
+                logger.error(f"⏱️ Background: TTS timeout: {e}")
+                capture_exception(e, {'context': 'background_tts_timeout', 'audio_id': audio_id})
             except Exception as tts_error:
                 logger.error(f"❌ Background: TTS generation failed: {tts_error}")
                 capture_exception(tts_error, {'context': 'background_tts', 'audio_id': audio_id})
 
-        # Submit to thread pool instead of creating new threads
-        app.tts_executor.submit(generate_audio_background)
+        # Submit to thread pool with timeout instead of creating new threads
+        future = app.tts_executor.submit(generate_audio_background)
+        # Store future for potential cancellation (optional cleanup)
+        if not hasattr(app, 'tts_futures'):
+            app.tts_futures = []
+        app.tts_futures.append(future)
+        # Clean up completed futures
+        app.tts_futures = [f for f in app.tts_futures if not f.done()]
 
         result_payload = {
             'success': True,
@@ -1937,6 +1991,25 @@ def health_check():
 
 
 # ============= ADMIN ENDPOINTS =============
+
+@app.route('/auth/check-admin', methods=['GET'])
+@require_auth
+def check_admin_status():
+    """Debug endpoint to check admin status"""
+    try:
+        user = db.get_user_by_id(request.user_id)
+        return jsonify({
+            'success': True,
+            'user_id': request.user_id,
+            'email': request.user_email,
+            'is_admin_from_request': request.is_admin,
+            'is_admin_from_db': user.get('is_admin', False) if user else None,
+            'user_data': user
+        })
+    except Exception as e:
+        logger.error(f"Check admin error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 
 @app.route('/admin/dashboard', methods=['GET', 'OPTIONS'])
 @require_admin

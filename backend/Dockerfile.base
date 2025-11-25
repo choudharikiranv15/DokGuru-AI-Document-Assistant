@@ -100,9 +100,11 @@ RUN pip install --no-cache-dir \
 # ============================================================================
 # Install Piper TTS (Fast, Offline English TTS - 0.3s synthesis time)
 RUN wget -O /tmp/piper.tar.gz https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_amd64.tar.gz && \
-    tar -xzf /tmp/piper.tar.gz -C /usr/local/bin && \
+    mkdir -p /tmp/piper && \
+    tar -xzf /tmp/piper.tar.gz -C /tmp/piper && \
+    find /tmp/piper -name "piper" -type f -exec mv {} /usr/local/bin/piper \; && \
     chmod +x /usr/local/bin/piper && \
-    rm /tmp/piper.tar.gz
+    rm -rf /tmp/piper.tar.gz /tmp/piper
 
 # Download Piper voice model (English - en_US-lessac-medium, high quality, fast)
 RUN mkdir -p /app/tts_models && \

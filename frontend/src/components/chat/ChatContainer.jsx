@@ -40,33 +40,35 @@ export default function ChatContainer() {
             <div className="flex-1 overflow-y-auto px-4 py-6">
                 {messages.length === 0 ? (
                     <div className="h-full flex items-center justify-center relative overflow-hidden">
-                        {/* Animated Background Orbs */}
-                        <div className="absolute inset-0 pointer-events-none">
-                            <motion.div
-                                className="absolute top-1/4 left-1/4 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl"
-                                animate={{
-                                    scale: [1, 1.2, 1],
-                                    x: [0, 30, 0],
-                                }}
-                                transition={{
-                                    duration: 15,
-                                    repeat: Infinity,
-                                    ease: "easeInOut"
-                                }}
-                            />
-                            <motion.div
-                                className="absolute top-1/3 right-1/4 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl"
-                                animate={{
-                                    scale: [1, 1.3, 1],
-                                    x: [0, -30, 0],
-                                }}
-                                transition={{
-                                    duration: 18,
-                                    repeat: Infinity,
-                                    ease: "easeInOut"
-                                }}
-                            />
-                        </div>
+                        {/* Animated Background Orbs - Only when chat is empty to save CPU */}
+                        {messages.length === 0 && (
+                            <div className="absolute inset-0 pointer-events-none">
+                                <motion.div
+                                    className="absolute top-1/4 left-1/4 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl"
+                                    animate={{
+                                        scale: [1, 1.2, 1],
+                                        x: [0, 30, 0],
+                                    }}
+                                    transition={{
+                                        duration: 15,
+                                        repeat: Infinity,
+                                        ease: "easeInOut"
+                                    }}
+                                />
+                                <motion.div
+                                    className="absolute top-1/3 right-1/4 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl"
+                                    animate={{
+                                        scale: [1, 1.3, 1],
+                                        x: [0, -30, 0],
+                                    }}
+                                    transition={{
+                                        duration: 18,
+                                        repeat: Infinity,
+                                        ease: "easeInOut"
+                                    }}
+                                />
+                            </div>
+                        )}
 
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}

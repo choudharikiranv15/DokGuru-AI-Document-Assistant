@@ -13,7 +13,7 @@ export default function DocumentList() {
 
     useEffect(() => {
         fetchDocuments()
-    }, [fetchDocuments])
+    }, []) // Empty dependency - only fetch on mount to prevent infinite re-render
 
     const handleClearAll = async () => {
         if (confirm('Clear all documents from the vector store?')) {

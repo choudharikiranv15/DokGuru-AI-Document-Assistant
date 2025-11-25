@@ -43,6 +43,7 @@ class RedisCacheManager:
         self.config = config
         self.upstash_client = None
         self.local_client = None
+        self.redis_pool = None
         self.enabled = False
         self.mode = "disabled"
 
@@ -79,6 +80,7 @@ class RedisCacheManager:
                 )
 
                 self.local_client = redis.Redis(connection_pool=redis_pool)
+                self.redis_pool = redis_pool  # Store pool reference for cleanup
 
                 # Test connection
                 self.local_client.ping()
@@ -88,6 +90,7 @@ class RedisCacheManager:
             except Exception as e:
                 logger.warning(f"Local Redis connection failed: {e}")
                 self.local_client = None
+                self.redis_pool = None
 
         # Final status
         if not self.enabled:
@@ -625,3 +628,30 @@ class RedisCacheManager:
                 "error": str(e),
                 "message": "Redis connection failed"
             }
+
+    def close(self):
+        """
+        Close Redis connections and cleanup connection pool
+        Should be called on application shutdown
+        """
+        try:
+            if self.local_client:
+                logger.info("Closing Redis local client...")
+                self.local_client.close()
+                self.local_client = None
+
+            if hasattr(self, 'redis_pool') and self.redis_pool:
+                logger.info("Disconnecting Redis connection pool...")
+                self.redis_pool.disconnect()
+                self.redis_pool = None
+
+            self.enabled = False
+            logger.info("✓ Redis connections closed successfully")
+
+        except Exception as e:
+            logger.error(f"Error closing Redis connections: {e}")
+
+    @property
+    def redis_client(self):
+        """Property to access active Redis client for cleanup"""
+        return self._get_client()
