@@ -1,28 +1,119 @@
 # ============================================================================
-# DokGuru Voice - PRODUCTION IMAGE
+# DokGuru Voice - Cloud Run Optimized Dockerfile (LEAN VERSION)
 # ============================================================================
-# This builds on top of the base image with only lightweight app dependencies
-# Build time: ~3-5 minutes (vs 30+ minutes without base image!)
+# Optimizations:
+# - Multi-stage build to remove build dependencies
+# - Only essential system packages in final image
+# - Removed: Azure TTS, Anthropic, scikit-learn (~160MB saved)
+# - Aggressive cleanup to reduce image size
+# - Optimized layer caching for fast rebuilds
 #
-# Prerequisites:
-#   1. Build and push base image first (see Dockerfile.base)
-#   2. Update the FROM line below with your Docker Hub username
-#
-# To build:
-#   docker build -t dokguru-voice:latest .
-#
-# To run locally:
-#   docker run -p 8080:8080 --env-file .env dokguru-voice:latest
+# Expected size: ~2.3GB (vs ~4GB before optimization)
+# First build: 15-20 minutes | Rebuilds: 3-5 minutes
 # ============================================================================
 
 # ============================================================================
-# STAGE 1: Use pre-built base image
+# STAGE 1: BUILDER (Heavy dependencies compiled here)
 # ============================================================================
-FROM choudharikiranv15/dokguru-base:latest
+FROM python:3.11-slim AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    g++ \
+    git \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install PyTorch CPU-only (largest dependency - do first for caching)
+RUN pip install --no-cache-dir \
+    torch==2.5.1 \
+    --index-url https://download.pytorch.org/whl/cpu
+
+# Install ML/AI packages (removed scikit-learn - not used)
+RUN pip install --no-cache-dir \
+    sentence-transformers==2.7.0 \
+    transformers==4.57.1 \
+    huggingface-hub==0.36.0 \
+    tokenizers==0.22.1 \
+    chromadb==1.0.20 \
+    numpy==1.26.4 \
+    pandas==2.3.3 \
+    scipy==1.16.3
+
+# Pre-download ML models (reduces cold start time)
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+
+# ============================================================================
+# STAGE 2: RUNTIME (Final lean image)
+# ============================================================================
+FROM python:3.11-slim
 
 LABEL maintainer="DokGuru Team"
-LABEL description="Production image for DokGuru Voice API"
-LABEL version="1.0"
+LABEL description="Cloud Run optimized production image for DokGuru Voice"
+LABEL version="2.0-lean"
+
+# Install ONLY runtime dependencies (no build tools)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    wget \
+    ffmpeg \
+    libsndfile1 \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    tesseract-ocr-hin \
+    tesseract-ocr-kan \
+    default-jre \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python packages from builder stage
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
+
+# ============================================================================
+# INSTALL LIGHTWEIGHT DEPENDENCIES (Optimized - removed unused packages)
+# ============================================================================
+RUN pip install --no-cache-dir \
+    gTTS==2.5.4 \
+    pydub==0.25.1 \
+    soundfile==0.13.1 \
+    edge-tts==6.1.9 \
+    pdfplumber==0.10.3 \
+    pypdf==3.17.4 \
+    PyMuPDF==1.23.8 \
+    tabula-py==2.10.0 \
+    pytesseract==0.3.10 \
+    Pillow==10.4.0 \
+    groq==0.4.1 \
+    openai==1.108.1 \
+    google-generativeai==0.8.5 \
+    SpeechRecognition==3.14.3
+
+# Removed packages (saves ~160MB):
+# - azure-cognitiveservices-speech (not used)
+# - anthropic (not using Claude API)
+# - scikit-learn (not used in this app)
+
+# ============================================================================
+# INSTALL PIPER TTS (Lightweight offline TTS)
+# ============================================================================
+RUN wget -O /tmp/piper.tar.gz https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_amd64.tar.gz && \
+    mkdir -p /tmp/piper && \
+    tar -xzf /tmp/piper.tar.gz -C /tmp/piper && \
+    find /tmp/piper -name "piper" -type f -exec mv {} /usr/local/bin/piper \; && \
+    chmod +x /usr/local/bin/piper && \
+    rm -rf /tmp/piper.tar.gz /tmp/piper
+
+# Download Piper voice model (only English for now - saves space)
+RUN mkdir -p /app/tts_models && \
+    wget -O /app/tts_models/en_US-lessac-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/en_US-lessac-medium.onnx && \
+    wget -O /app/tts_models/en_US-lessac-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
 
 # ============================================================================
 # SET WORKING DIRECTORY
@@ -30,29 +121,24 @@ LABEL version="1.0"
 WORKDIR /app
 
 # ============================================================================
-# INSTALL LIGHTWEIGHT APPLICATION DEPENDENCIES
+# INSTALL APPLICATION DEPENDENCIES
 # ============================================================================
-# Copy only requirements file first (for layer caching)
+# Copy requirements first (better layer caching)
 COPY requirements-app.txt ./
-
-# Install app-specific dependencies (fast - only ~30 packages)
 RUN pip install --no-cache-dir -r requirements-app.txt
 
 # ============================================================================
 # COPY APPLICATION CODE
 # ============================================================================
-# Copy source code
 COPY src/ ./src/
 COPY app.py ./
 COPY app_minimal.py ./
 COPY config/ ./config/
 COPY migrations/ ./migrations/
-
-# Copy Gunicorn configuration
 COPY gunicorn.conf.py ./
-
-# Copy environment template (will be overridden by Render env vars)
 COPY .env.example ./.env.example
+COPY templates/ ./templates/
+COPY static/ ./static/
 
 # ============================================================================
 # CREATE NECESSARY DIRECTORIES
@@ -60,20 +146,29 @@ COPY .env.example ./.env.example
 RUN mkdir -p \
     data/pdfs \
     data/audio \
-    data/chroma_db \
-    templates \
-    static
-
-# Copy templates and static files (directories already exist in repo)
-COPY templates/ ./templates/
-COPY static/ ./static/
+    data/chroma_db
 
 # ============================================================================
 # SET PERMISSIONS
 # ============================================================================
-# Make data directories writable
 RUN chmod -R 755 /app && \
     chmod -R 777 data/
+
+# ============================================================================
+# AGGRESSIVE CLEANUP
+# ============================================================================
+RUN pip cache purge && \
+    apt-get autoremove -y && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /root/.cache/pip
+
+# ============================================================================
+# ENVIRONMENT VARIABLES
+# ============================================================================
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV FLASK_ENV=production
+ENV PORT=8080
 
 # ============================================================================
 # EXPOSE PORT
@@ -81,30 +176,7 @@ RUN chmod -R 755 /app && \
 EXPOSE 8080
 
 # ============================================================================
-# ENVIRONMENT VARIABLES
-# ============================================================================
-ENV FLASK_ENV=production
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PORT=8080
-
-# ============================================================================
-# HEALTH CHECK
-# ============================================================================
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/ || exit 1
-
-# ============================================================================
 # STARTUP COMMAND
 # ============================================================================
-# Use app_minimal.py for faster startup and lower memory usage (required for free tier)
-# Render will override PORT via environment variable
-CMD gunicorn --bind 0.0.0.0:$PORT app_minimal:app -c gunicorn.conf.py
-
-# ============================================================================
-# IMAGE INFO
-# ============================================================================
-# Log startup information
-RUN echo "DokGuru Voice Production Image v1.0" && \
-    echo "Base image: choudharikiranv15/dokguru-base:latest" && \
-    echo "Build date: $(date)"
+# Use app_minimal.py for optimized memory usage
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app_minimal:app", "-c", "gunicorn.conf.py"]

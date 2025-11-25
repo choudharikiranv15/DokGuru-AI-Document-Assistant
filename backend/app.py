@@ -1313,6 +1313,155 @@ def ask_question():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
+@app.route('/ask-stream', methods=['POST'])
+@require_auth
+def ask_question_stream():
+    """
+    Streaming endpoint for real-time LLM + TTS
+    Returns Server-Sent Events (SSE) for progressive response
+    """
+    import json
+    import re
+    from flask import stream_with_context
+
+    try:
+        data = request.json
+        question = data.get('question', '').strip()
+        document_name = data.get('document_name')
+        language = data.get('language', 'en')
+        user_id = request.user_id
+
+        if not question:
+            return jsonify({'success': False, 'message': 'Question is required'}), 400
+
+        # Check query limits
+        query_limit = user_limits.check_query_limit(user_id)
+        if not query_limit['allowed']:
+            return jsonify({
+                'success': False,
+                'message': query_limit['message'],
+                'limit_reached': True
+            }), 429
+
+        # Check if user has documents
+        user_documents = rag_system.list_documents(user_id=user_id)
+        if not user_documents:
+            return jsonify({
+                'success': False,
+                'message': 'Please upload at least one PDF document.',
+                'no_documents': True
+            }), 400
+
+        # Get conversation history
+        conversation_history = rag_system.cache.get_user_conversation(user_id)
+
+        @stream_with_context
+        def generate():
+            try:
+                # Get context from RAG system
+                context_result = rag_system.retrieve_context(
+                    question,
+                    conversation_history,
+                    document_name=document_name,
+                    user_id=user_id
+                )
+
+                context = context_result.get('context', '')
+                sources = context_result.get('sources', [])
+
+                # Build prompt for LLM
+                prompt = f"""Based on the following context, answer the question concisely and accurately.
+
+Context:
+{context}
+
+Question: {question}
+
+Answer in {language}. Cite page numbers if available."""
+
+                # Stream from LLM
+                from src.llm_handler import get_groq_streaming_response
+
+                buffer = ""
+                sentence_count = 0
+                full_response = ""
+                audio_queue = []
+
+                for chunk_text in get_groq_streaming_response(prompt):
+                    if not chunk_text:
+                        continue
+
+                    buffer += chunk_text
+                    full_response += chunk_text
+
+                    # Check for sentence boundary
+                    if re.search(r'[.!?]\s*$', buffer) and len(buffer.strip()) > 20:
+                        sentence = buffer.strip()
+                        sentence_count += 1
+
+                        # Send text immediately
+                        yield f"data: {json.dumps({'type': 'text', 'content': sentence, 'sentence_id': sentence_count})}\n\n"
+
+                        # Generate TTS in background
+                        try:
+                            import hashlib
+                            audio_id = f"stream_{user_id}_{sentence_count}_{hashlib.md5(sentence.encode()).hexdigest()[:8]}"
+
+                            # Generate audio (synchronous for now - can be async later)
+                            tts_result = tts_handler.synthesize(
+                                sentence,
+                                language=language,
+                                output_filename=audio_id
+                            )
+
+                            if tts_result.get('success'):
+                                audio_data = {
+                                    'type': 'audio',
+                                    'sentence_id': sentence_count,
+                                    'audio_url': tts_result.get('audio_url'),
+                                    'duration': tts_result.get('duration', 0),
+                                    'engine': tts_result.get('engine', 'unknown')
+                                }
+                                yield f"data: {json.dumps(audio_data)}\n\n"
+                        except Exception as tts_error:
+                            logger.error(f"TTS generation error: {tts_error}")
+
+                        buffer = ""
+
+                # Send remaining text
+                if buffer.strip():
+                    sentence_count += 1
+                    yield f"data: {json.dumps({'type': 'text', 'content': buffer.strip(), 'sentence_id': sentence_count})}\n\n"
+
+                # Send completion
+                yield f"data: {json.dumps({'type': 'done', 'full_response': full_response, 'sources': sources, 'total_sentences': sentence_count})}\n\n"
+
+                # Update conversation history
+                conversation_history.append(question)
+                conversation_history.append(full_response)
+                rag_system.cache.save_user_conversation(user_id, conversation_history)
+
+                logger.info(f"Streaming complete: {sentence_count} sentences for user {user_id}")
+
+            except Exception as e:
+                logger.error(f"Streaming error: {e}", exc_info=True)
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+        return Response(
+            generate(),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no',
+                'Connection': 'keep-alive'
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Stream endpoint error: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 @app.route('/clear', methods=['POST'])
 @require_auth
 def clear_conversation():

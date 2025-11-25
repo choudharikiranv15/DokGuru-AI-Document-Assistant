@@ -287,3 +287,53 @@ REMEMBER: Just answer directly! No analysis of what's in the context!
     def clear_history(self):
         """Clear conversation history"""
         self.conversation_history = []
+
+
+# ============================================================================
+# Streaming Helper Function
+# ============================================================================
+
+def get_groq_streaming_response(prompt: str):
+    """
+    Get streaming response from Groq API
+    Yields text chunks as they arrive
+
+    Args:
+        prompt: The prompt to send to LLM
+
+    Yields:
+        str: Text chunks from the LLM
+    """
+    import os
+    from groq import Groq
+
+    try:
+        client = Groq(api_key=os.getenv('GROQ_API_KEY'))
+
+        # Create streaming completion
+        stream = client.chat.completions.create(
+            model="llama-3.1-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant. Answer concisely and accurately based on the provided context."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            stream=True,
+            temperature=0.7,
+            max_tokens=1500
+        )
+
+        # Yield chunks as they arrive
+        for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+
+    except Exception as e:
+        logging.error(f"Streaming error: {e}")
+        # Fallback: Return error message
+        yield f"Error: {str(e)}"
