@@ -4,7 +4,6 @@ import { toast } from 'react-hot-toast'
 import { useChatStore } from '../../stores/chatStore'
 import { useDocumentStore } from '../../stores/documentStore'
 import { askQuestion } from '../../services/api'
-import LanguageSelector from './LanguageSelector'
 import api from '../../services/api'
 
 export default function ChatInput({ setIsThinking }) {
@@ -12,7 +11,6 @@ export default function ChatInput({ setIsThinking }) {
     const [loading, setLoading] = useState(false)
     const [isListening, setIsListening] = useState(false)
     const [transcript, setTranscript] = useState('')
-    const [selectedLanguage, setSelectedLanguage] = useState('auto') // Language for TTS
     const [streamingMode, setStreamingMode] = useState(true) // Enable streaming by default
     const [isStreaming, setIsStreaming] = useState(false)
     const [currentStreamMessage, setCurrentStreamMessage] = useState('')
@@ -59,7 +57,7 @@ export default function ChatInput({ setIsThinking }) {
         setIsThinking(true)
 
         try {
-            const response = await askQuestion(userMessage, currentDocument?.name, selectedLanguage)
+            const response = await askQuestion(userMessage, currentDocument?.name, 'auto')
 
             addMessage({
                 role: 'assistant',
@@ -68,7 +66,7 @@ export default function ChatInput({ setIsThinking }) {
                 metadata: response.metadata,
                 audioUrl: response.audio?.url || null,
                 audioGenerating: response.audio?.generating || false,
-                language: selectedLanguage,
+                language: 'auto',
                 timestamp: new Date().toISOString()
             })
         } catch (error) {
@@ -122,7 +120,7 @@ export default function ChatInput({ setIsThinking }) {
             body: JSON.stringify({
                 question,
                 document_name: currentDocument?.name,
-                language: selectedLanguage
+                language: 'auto'
             }),
             signal: abortControllerRef.current.signal
         })
@@ -400,12 +398,6 @@ export default function ChatInput({ setIsThinking }) {
                 )}
 
                 <div className="flex items-center gap-2">
-                    {/* Language Selector */}
-                    <LanguageSelector
-                        selectedLanguage={selectedLanguage}
-                        onLanguageChange={setSelectedLanguage}
-                    />
-
                     {/* Streaming Mode Toggle */}
                     <button
                         type="button"
