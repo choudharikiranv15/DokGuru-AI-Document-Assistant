@@ -589,18 +589,6 @@ def add_sentry_context():
 def index():
     return render_template('index.html')
 
-@app.route('/health')
-@limiter.exempt
-def health_check():
-    """Health check endpoint for Cloud Run"""
-    import time
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': time.time(),
-        'service': 'dokguru-backend',
-        'version': '2.0-streaming'
-    }), 200
-
 @app.route('/voice-test')
 def voice_test():
     return render_template('voice_test.html')

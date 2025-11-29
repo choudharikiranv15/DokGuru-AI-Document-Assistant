@@ -1,0 +1,120 @@
+name: Frontend CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-deploy.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+
+env:
+  NODE_VERSION: '20'
+  VITE_API_BASE_URL: https://dokguru-backend-739437500880.asia-south1.run.app
+
+jobs:
+  # ==================== TEST & BUILD JOB ====================
+  test-and-build:
+    name: Test & Build Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Lint
+        run: |
+          cd frontend
+          npm run lint || echo "⚠️ Lint warnings (non-blocking)"
+        continue-on-error: true
+
+      - name: Build
+        run: |
+          cd frontend
+          npm run build
+        env:
+          VITE_API_BASE_URL: ${{ env.VITE_API_BASE_URL }}
+
+      - name: Check build output
+        run: |
+          cd frontend
+          if [ -d "dist" ]; then
+            echo "✅ Build successful!"
+            ls -la dist/
+            du -sh dist/
+          else
+            echo "❌ Build failed - no dist folder"
+            exit 1
+          fi
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/dist
+          retention-days: 7
+
+  # ==================== DEPLOY TO VERCEL ====================
+  deploy:
+    name: Deploy to Vercel
+    needs: test-and-build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel Environment
+        run: |
+          cd frontend
+          vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build with Vercel
+        run: |
+          cd frontend
+          vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VITE_API_BASE_URL: ${{ env.VITE_API_BASE_URL }}
+
+      - name: Deploy to Vercel Production
+        id: deploy
+        run: |
+          cd frontend
+          DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_ENV
+          echo "✅ Deployed to: $DEPLOY_URL"
+
+      - name: Post deployment summary
+        if: always()
+        run: |
+          echo "## 🌐 Frontend Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| URL | ${{ env.DEPLOY_URL }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Production | https://dokguru.vercel.app |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
