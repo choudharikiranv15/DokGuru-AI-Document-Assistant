@@ -1344,7 +1344,7 @@ def ask_question():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
-@app.route('/ask-stream', methods=['POST'])
+@app.route('/ask-stream', methods=['POST', 'OPTIONS'])
 @require_auth
 def ask_question_stream():
     """
@@ -1354,6 +1354,8 @@ def ask_question_stream():
     import json
     import re
     from flask import stream_with_context
+
+    logger.info(f"🔄 Streaming request received from user")
 
     try:
         data = request.json

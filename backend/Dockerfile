@@ -178,5 +178,6 @@ EXPOSE 8080
 # ============================================================================
 # STARTUP COMMAND
 # ============================================================================
-# Use app_minimal.py for optimized memory usage
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app_minimal:app", "-c", "gunicorn.conf.py"]
+# Use main app.py directly for full functionality (streaming, file serving)
+# app_minimal.py proxy doesn't support SSE streaming or proper file serving
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app", "-c", "gunicorn.conf.py"]

@@ -46,6 +46,7 @@ Thumbs.db
 
 # Logs
 *.log
+logs/
 
 # Test database
 /test_chroma_db/
