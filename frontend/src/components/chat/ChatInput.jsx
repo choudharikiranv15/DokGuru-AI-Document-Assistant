@@ -79,7 +79,7 @@ export default function ChatInput({ setIsThinking }) {
 
     const handleStreamingSubmit = async (userMessage) => {
         setIsStreaming(true)
-        setIsThinking(true)
+        // Don't set isThinking in streaming mode - the streaming message placeholder shows progress
         setCurrentStreamMessage('')
         setAudioQueue([])
         setCurrentAudioIndex(0)
@@ -104,7 +104,6 @@ export default function ChatInput({ setIsThinking }) {
             }
         } finally {
             setIsStreaming(false)
-            setIsThinking(false)
         }
     }
 
@@ -398,25 +397,38 @@ export default function ChatInput({ setIsThinking }) {
                 )}
 
                 <div className="flex items-center gap-2">
-                    {/* Streaming Mode Toggle */}
-                    <button
-                        type="button"
-                        onClick={() => setStreamingMode(!streamingMode)}
-                        className={`p-3 rounded-full transition-all duration-200 flex-shrink-0 ${
-                            streamingMode
-                                ? 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30'
-                                : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                        }`}
-                        title={streamingMode ? "Streaming Mode (Fast)" : "Classic Mode"}
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            {streamingMode ? (
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            ) : (
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            )}
-                        </svg>
-                    </button>
+                    {/* Streaming Mode Toggle with Tooltip */}
+                    <div className="relative group">
+                        <button
+                            type="button"
+                            onClick={() => setStreamingMode(!streamingMode)}
+                            className={`p-3 rounded-full transition-all duration-200 flex-shrink-0 ${
+                                streamingMode
+                                    ? 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30'
+                                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                            }`}
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                {streamingMode ? (
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                ) : (
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                )}
+                            </svg>
+                        </button>
+                        {/* Tooltip */}
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                            <div className="text-xs font-medium text-white mb-1">
+                                {streamingMode ? 'Streaming Mode' : 'Classic Mode'}
+                            </div>
+                            <div className="text-xs text-gray-400 max-w-48">
+                                {streamingMode
+                                    ? 'See responses word-by-word as they generate. Faster feel.'
+                                    : 'Wait for complete response. More stable.'}
+                            </div>
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                        </div>
+                    </div>
 
                     {/* Text Input with integrated Voice Button */}
                     <div className="flex-1 relative">
