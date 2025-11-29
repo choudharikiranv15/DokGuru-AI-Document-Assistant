@@ -30,6 +30,7 @@ workers = int(os.getenv('GUNICORN_WORKERS', '1'))  # 1 worker for Render free ti
 worker_class = 'gevent'  # Async worker for I/O-bound operations (LLM, DB, Redis)
 worker_connections = int(os.getenv('GUNICORN_CONNECTIONS', '1000'))  # 1000 concurrent connections
 timeout = 300  # 5 minutes for ML model loading, PDF processing and LLM responses
+graceful_timeout = 300  # Allow 5 minutes for worker to finish during shutdown
 keepalive = 5
 
 # Restart workers after N requests (prevent memory leaks)

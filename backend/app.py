@@ -76,6 +76,15 @@ def validate_environment():
     missing_required = []
     missing_optional = []
 
+    # Debug: Log all required vars status
+    logger.info("Checking required environment variables...")
+    for var in REQUIRED_VARS.keys():
+        val = os.getenv(var)
+        if val:
+            logger.info(f"  ✓ {var}: SET (length={len(val)})")
+        else:
+            logger.error(f"  ✗ {var}: NOT SET")
+
     for var, description in REQUIRED_VARS.items():
         if not os.getenv(var):
             missing_required.append(f"  [REQUIRED] {var}: {description}")
@@ -90,9 +99,9 @@ def validate_environment():
         logger.error("="*70)
         for msg in missing_required:
             logger.error(msg)
-        logger.error("\nPlease set these variables in your Render dashboard")
+        logger.error("\nPlease set these variables in your deployment platform (Cloud Run, Render, etc.)")
         logger.error("="*70 + "\n")
-        # Don't raise - let the app start so Render can detect the port
+        # Don't raise - let the app start so the platform can detect the port
         # The app will fail gracefully when endpoints are accessed
         return False
 
@@ -111,7 +120,7 @@ def validate_environment():
 try:
     env_valid = validate_environment()
     if not env_valid:
-        logger.error("⚠️ App started with missing required environment variables. Configure them in Render dashboard.")
+        logger.error("⚠️ App started with missing required environment variables. Configure them in your deployment platform.")
 except Exception as e:
     logger.error(f"Environment validation failed: {e}")
     env_valid = False
