@@ -36,6 +36,87 @@ api.interceptors.request.use(
 )
 
 // Document APIs
+
+// Async upload with background processing (FAST - recommended)
+export const uploadDocumentAsync = async (file, onProgress = null) => {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await api.post('/upload-async', formData, {
+        headers: {
+            'Content-Type': 'multipart/form-data',
+        },
+    })
+
+    if (!response.data.success) {
+        throw new Error(response.data.message || 'Upload failed')
+    }
+
+    // Return job info for polling
+    return {
+        jobId: response.data.job_id,
+        async: true,
+        message: response.data.message
+    }
+}
+
+// Poll upload status
+export const getUploadStatus = async (jobId) => {
+    const response = await api.get(`/upload-status/${jobId}`)
+
+    if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to get status')
+    }
+
+    return response.data.job
+}
+
+// Wait for upload to complete with progress callback
+export const waitForUpload = async (jobId, onProgress = null, pollInterval = 500) => {
+    return new Promise((resolve, reject) => {
+        const poll = async () => {
+            try {
+                const status = await getUploadStatus(jobId)
+
+                // Call progress callback
+                if (onProgress) {
+                    onProgress(status)
+                }
+
+                if (status.status === 'completed') {
+                    resolve(status)
+                } else if (status.status === 'failed') {
+                    reject(new Error(status.error || 'Processing failed'))
+                } else {
+                    // Still processing, poll again
+                    setTimeout(poll, pollInterval)
+                }
+            } catch (error) {
+                reject(error)
+            }
+        }
+
+        poll()
+    })
+}
+
+// Combined async upload with progress tracking
+export const uploadDocumentWithProgress = async (file, onProgress = null) => {
+    // Step 1: Upload file (fast)
+    const uploadResult = await uploadDocumentAsync(file)
+
+    // Step 2: Wait for processing with progress updates
+    const finalStatus = await waitForUpload(uploadResult.jobId, onProgress)
+
+    // Return in same format as sync upload
+    return {
+        name: finalStatus.result?.document_name || file.name.replace('.pdf', ''),
+        statistics: finalStatus.result?.statistics || {},
+        processingTime: finalStatus.result?.statistics?.processing_time
+    }
+}
+
+// Legacy sync upload (slower, but compatible)
 export const uploadDocument = async (file) => {
     const formData = new FormData()
     formData.append('file', file)

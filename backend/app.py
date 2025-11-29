@@ -441,6 +441,16 @@ _components.register('password_reset', LazyLoader(
     )(__import__('src.auth.password_reset', fromlist=['PasswordResetService']).PasswordResetService)
 ))
 
+_components.register('async_processor', LazyLoader(
+    'Async Processor',
+    lambda: (
+        lambda AsyncDocumentProcessor: AsyncDocumentProcessor(
+            _components.get('rag_system'),
+            max_workers=2
+        ) if _components.get('rag_system') else None
+    )(__import__('src.async_processor', fromlist=['AsyncDocumentProcessor']).AsyncDocumentProcessor)
+))
+
 # Backward compatibility - proxy objects that lazy-load on attribute access
 class _LazyProxy:
     """Proxy that lazy-loads component on first attribute access"""
@@ -477,6 +487,7 @@ user_limits = _LazyProxy('user_limits')
 email_service = _LazyProxy('email_service')
 analytics = _LazyProxy('analytics')
 password_reset_service = _LazyProxy('password_reset')
+async_processor = _LazyProxy('async_processor')
 
 # Getter functions for explicit access
 def get_config(): return _components.get('config')
@@ -1254,6 +1265,132 @@ def upload_pdf():
 
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
+
+
+# ============= ASYNC UPLOAD ENDPOINTS (FAST UPLOAD WITH BACKGROUND PROCESSING) =============
+
+@app.route('/upload-async', methods=['POST', 'OPTIONS'])
+@require_auth
+def upload_pdf_async():
+    """
+    Fast async upload - returns immediately, processes in background
+    Use /upload-status/<job_id> to check progress
+    """
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': 'No file uploaded'})
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'success': False, 'message': 'No file selected'})
+
+    if not file.filename.endswith('.pdf'):
+        return jsonify({'success': False, 'message': 'Only PDF files are allowed'})
+
+    try:
+        user_id = request.user_id
+
+        # Check document limit
+        current_docs = _get_user_documents_cached(user_id, _get_cache_ttl_hash())
+        doc_limit = user_limits.check_document_limit(user_id, len(current_docs))
+
+        if not doc_limit['allowed']:
+            return jsonify({
+                'success': False,
+                'message': doc_limit['message'],
+                'limit_reached': True,
+                'limits': doc_limit
+            }), 403
+
+        # Check file size
+        file.seek(0, 2)
+        file_size = file.tell()
+        file.seek(0)
+
+        size_check = user_limits.check_file_size(file_size, file.filename)
+        if not size_check['allowed']:
+            return jsonify({
+                'success': False,
+                'message': size_check['message'],
+                'file_too_large': True,
+                'limits': size_check
+            }), 413
+
+        # Save file quickly
+        filename = secure_filename(file.filename)
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+
+        # Quick MIME check
+        try:
+            if MAGIC_AVAILABLE:
+                mime = magic.Magic(mime=True)
+                file_type = mime.from_file(filepath)
+            else:
+                file_type, _ = mimetypes.guess_type(filepath)
+                file_type = file_type or 'application/octet-stream'
+
+            if file_type != 'application/pdf':
+                os.remove(filepath)
+                return jsonify({
+                    'success': False,
+                    'message': f'Invalid file type: {file_type}. Only PDF files are allowed.'
+                }), 400
+        except Exception as mime_error:
+            logger.warning(f"MIME check failed: {mime_error}")
+
+        # Submit for async processing - returns immediately!
+        job = async_processor.submit_job(user_id, filename, filepath)
+
+        # Return job info for tracking
+        return jsonify({
+            'success': True,
+            'async': True,
+            'job_id': job.job_id,
+            'message': 'File uploaded! Processing in background...',
+            'status_url': f'/upload-status/{job.job_id}'
+        })
+
+    except Exception as e:
+        logger.error(f"Async upload error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/upload-status/<job_id>', methods=['GET', 'OPTIONS'])
+@require_auth
+def get_upload_status(job_id):
+    """
+    Get async upload job status
+    Poll this endpoint to track processing progress
+    """
+    try:
+        user_id = request.user_id
+        job = async_processor.get_job_status(job_id, user_id)
+
+        if not job:
+            return jsonify({
+                'success': False,
+                'message': 'Job not found or access denied'
+            }), 404
+
+        response = {
+            'success': True,
+            'job': job.to_dict()
+        }
+
+        # If completed successfully, clear document cache
+        if job.status.value == 'completed' and job.result:
+            clear_document_cache()
+
+        return jsonify(response)
+
+    except Exception as e:
+        logger.error(f"Status check error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ============= END ASYNC UPLOAD ENDPOINTS =============
+
 
 @app.route('/ask', methods=['POST'])
 @require_auth
