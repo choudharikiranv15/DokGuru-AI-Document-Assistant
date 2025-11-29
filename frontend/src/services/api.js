@@ -3,7 +3,7 @@ import axios from 'axios'
 // Use environment variable for API URL, fallback to localhost for development
 // Production URL hardcoded for Vercel deployment (Vercel env var bug workaround)
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||
-    (import.meta.env.PROD ? 'https://dokguru-voice-api-docker.onrender.com' : 'http://localhost:8080')
+    (import.meta.env.PROD ? 'https://dokguru-backend-739437500880.asia-south1.run.app' : 'http://localhost:8080')
 
 const api = axios.create({
     baseURL: API_BASE_URL,

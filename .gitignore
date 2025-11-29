@@ -13,6 +13,8 @@ venv/
 .env.production
 backend/.env.production
 config/.env
+env.yaml
+backend/env.yaml
 
 # Node modules (frontend dependencies)
 node_modules/

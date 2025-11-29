@@ -168,7 +168,7 @@ export default function Contact() {
                     {/* Status */}
                     <div className="mt-12 text-center">
                         <a
-                            href="https://dokguru-voice-api-docker.onrender.com/health"
+                            href="https://dokguru-backend-739437500880.asia-south1.run.app/health"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-2 px-6 py-3 bg-green-500/10 border border-green-500/20 hover:border-green-500/40 rounded-lg transition-all"

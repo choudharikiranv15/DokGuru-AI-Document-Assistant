@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||
+    (import.meta.env.PROD ? 'https://dokguru-backend-739437500880.asia-south1.run.app' : 'http://localhost:8080')
+
 export default function SpotifyAudioPlayer({ audioUrl }) {
     const [isPlaying, setIsPlaying] = useState(false)
     const [currentTime, setCurrentTime] = useState(0)
@@ -13,7 +16,7 @@ export default function SpotifyAudioPlayer({ audioUrl }) {
     useEffect(() => {
         const generateWaveform = async () => {
             try {
-                const response = await fetch(`http://localhost:8080${audioUrl}`)
+                const response = await fetch(`${API_BASE_URL}${audioUrl}`)
                 const arrayBuffer = await response.arrayBuffer()
 
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)()
@@ -112,7 +115,7 @@ export default function SpotifyAudioPlayer({ audioUrl }) {
 
     return (
         <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-[#1e293b] to-[#0f172a] rounded-2xl border border-gray-800 shadow-lg">
-            <audio ref={audioRef} src={`http://localhost:8080${audioUrl}`} preload="metadata" />
+            <audio ref={audioRef} src={`${API_BASE_URL}${audioUrl}`} preload="metadata" />
 
             {/* Play/Pause Button */}
             <button

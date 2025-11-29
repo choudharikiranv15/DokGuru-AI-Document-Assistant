@@ -1181,7 +1181,7 @@ export default function Landing() {
                                         </a>
                                     </li>
                                     <li>
-                                        <a href="https://dokguru-voice-api-docker.onrender.com/health" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-cyan-400 transition-colors text-sm flex items-center gap-2 group">
+                                        <a href="https://dokguru-backend-739437500880.asia-south1.run.app/health" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-cyan-400 transition-colors text-sm flex items-center gap-2 group">
                                             <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
                                             <span>API Status</span>
                                         </a>

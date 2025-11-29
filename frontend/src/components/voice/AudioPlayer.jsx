@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||
+    (import.meta.env.PROD ? 'https://dokguru-backend-739437500880.asia-south1.run.app' : 'http://localhost:8080')
+
 export default function AudioPlayer({ audioUrl }) {
     const [isPlaying, setIsPlaying] = useState(false)
     const [currentTime, setCurrentTime] = useState(0)
@@ -74,7 +77,7 @@ export default function AudioPlayer({ audioUrl }) {
 
     return (
         <div className="flex items-center gap-3 p-3 bg-[#0f172a] rounded-xl border border-gray-800">
-            <audio ref={audioRef} src={`http://localhost:8080${audioUrl}`} preload="metadata" />
+            <audio ref={audioRef} src={`${API_BASE_URL}${audioUrl}`} preload="metadata" />
 
             {/* Play/Pause Button */}
             <button
