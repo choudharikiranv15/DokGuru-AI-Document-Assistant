@@ -187,40 +187,77 @@ csp = {
 
 # CORS Configuration - MUST be initialized BEFORE Talisman (non-fatal)
 # Otherwise Talisman intercepts OPTIONS preflight requests
-try:
-    # Default CORS origins include Cloud Run URL + localhost for development
-    default_origins = (
-        'https://dokguru-backend-739437500880.asia-south1.run.app,'
-        'http://localhost:5173,http://localhost:5174,http://localhost:3000,'
-        'http://localhost:8080'
-    )
-    cors_origins = os.getenv('CORS_ORIGINS', default_origins).split(',')
 
+# Define allowed origins at module level - Vercel frontend + localhost for development
+ALLOWED_ORIGINS = [
+    'https://dokguru.vercel.app',  # Production frontend on Vercel
+    'https://www.dokguru.vercel.app',  # www subdomain variant
+    'https://dokguru-backend-739437500880.asia-south1.run.app',  # Cloud Run backend
+    'http://localhost:5173',  # Vite dev server
+    'http://localhost:5174',  # Vite dev server (alternate port)
+    'http://localhost:3000',  # React dev server
+    'http://localhost:8080',  # Local backend
+    'http://127.0.0.1:5173',  # Alternative localhost
+    'http://127.0.0.1:8080',  # Alternative localhost
+]
+
+# Add any additional origins from environment variable
+_env_origins = os.getenv('CORS_ORIGINS', '')
+if _env_origins:
+    ALLOWED_ORIGINS.extend([o.strip() for o in _env_origins.split(',') if o.strip()])
+
+# Remove duplicates while preserving order
+ALLOWED_ORIGINS = list(dict.fromkeys(ALLOWED_ORIGINS))
+
+try:
     # Log CORS configuration
-    logger.info(f"CORS enabled for origins: {cors_origins}")
+    logger.info(f"CORS enabled for origins: {ALLOWED_ORIGINS}")
 
     CORS(app, resources={
         r"/*": {
-            "origins": cors_origins,
-            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": [
-                "Content-Type",
-                "Authorization",
-                "baggage",           # Sentry tracing
-                "sentry-trace",      # Sentry tracing
-                "X-Requested-With",  # Common AJAX header
-                "Accept",            # Standard header
-                "Origin"             # CORS header
-            ],
-            "expose_headers": ["Content-Type", "Authorization"],
+            "origins": ALLOWED_ORIGINS,
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+            "allow_headers": ["*"],  # Allow all headers to prevent header-related CORS issues
+            "expose_headers": ["Content-Type", "Authorization", "X-Request-Id"],
             "supports_credentials": True,
-            "max_age": 3600  # Cache preflight requests for 1 hour
-    }
+            "max_age": 86400  # Cache preflight for 24 hours
+        }
     })
     logger.info("✓ CORS initialized successfully")
 except Exception as e:
     logger.warning(f"CORS initialization failed (non-critical): {e}")
     # Continue without CORS
+
+# FALLBACK: Manual CORS headers for all responses (belt and suspenders approach)
+@app.after_request
+def add_cors_headers(response):
+    """Add CORS headers to every response as a fallback safety net"""
+    origin = request.headers.get('Origin', '')
+
+    # Check if origin is in allowed list or matches pattern
+    if origin in ALLOWED_ORIGINS or origin.endswith('.vercel.app'):
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, Origin, X-Requested-With, baggage, sentry-trace'
+        response.headers['Access-Control-Max-Age'] = '86400'
+
+    return response
+
+# Handle OPTIONS preflight requests globally
+@app.before_request
+def handle_preflight():
+    """Handle CORS preflight OPTIONS requests before they reach route handlers"""
+    if request.method == 'OPTIONS':
+        origin = request.headers.get('Origin', '')
+        if origin in ALLOWED_ORIGINS or origin.endswith('.vercel.app'):
+            response = app.make_default_options_response()
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, Origin, X-Requested-With, baggage, sentry-trace'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Max-Age'] = '86400'
+            return response
 
 # Security headers with Flask-Talisman (non-fatal)
 # Initialized AFTER CORS to avoid blocking preflight requests
