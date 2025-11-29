@@ -1,7 +1,7 @@
 """
 User Limits for Beta Launch
 - Document limits: 5 docs per user
-- Query limits: 50 queries per day
+- Query limits: 100 queries per day (increased for testing)
 - File size limits: 10MB max
 """
 import logging
@@ -16,9 +16,9 @@ class UserLimits:
     Uses Redis for tracking if available, otherwise in-memory
     """
 
-    # Beta limits
+    # Beta limits (increased for testing phase)
     MAX_DOCUMENTS_PER_USER = 5
-    MAX_QUERIES_PER_DAY = 50
+    MAX_QUERIES_PER_DAY = 100  # Increased from 50 for testing
     MAX_FILE_SIZE_MB = 10
     MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 

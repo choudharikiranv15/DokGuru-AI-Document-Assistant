@@ -140,10 +140,11 @@ def cleanup_thread_pool():
 def cleanup_redis():
     """Cleanup Redis connection pool on app shutdown"""
     try:
-        from src.redis_cache import redis_cache
-        if redis_cache and redis_cache.redis_client:
+        # Access the cache through the rag_system component if it's been initialized
+        rag = _components._instances.get('rag_system')
+        if rag and hasattr(rag, 'cache') and rag.cache:
             logger.info("🧹 Closing Redis connections...")
-            redis_cache.close()
+            rag.cache.close()
             logger.info("✓ Redis connections closed")
     except Exception as e:
         logger.error(f"Error closing Redis: {e}")

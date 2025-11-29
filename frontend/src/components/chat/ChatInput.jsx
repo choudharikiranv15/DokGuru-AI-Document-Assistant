@@ -11,7 +11,7 @@ export default function ChatInput({ setIsThinking }) {
     const [loading, setLoading] = useState(false)
     const [isListening, setIsListening] = useState(false)
     const [transcript, setTranscript] = useState('')
-    const [streamingMode, setStreamingMode] = useState(true) // Enable streaming by default
+    const [streamingMode, setStreamingMode] = useState(false) // Classic mode by default (more stable)
     const [isStreaming, setIsStreaming] = useState(false)
     const [currentStreamMessage, setCurrentStreamMessage] = useState('')
     const [audioQueue, setAudioQueue] = useState([])
@@ -27,10 +27,20 @@ export default function ChatInput({ setIsThinking }) {
     const addMessage = useChatStore(state => state.addMessage)
     const updateMessage = useChatStore(state => state.updateMessage)
     const currentDocument = useDocumentStore(state => state.currentDocument)
+    const documents = useDocumentStore(state => state.documents)
 
     const handleSubmit = async (e) => {
         e.preventDefault()
         if (!input.trim() || loading || isStreaming) return
+
+        // Check if any documents are uploaded
+        if (!documents || documents.length === 0) {
+            toast.error('Please upload a document first before asking questions', {
+                duration: 4000,
+                icon: '📄'
+            })
+            return
+        }
 
         const userMessage = input.trim()
         setInput('')
@@ -397,8 +407,8 @@ export default function ChatInput({ setIsThinking }) {
                 )}
 
                 <div className="flex items-center gap-1 sm:gap-2">
-                    {/* Streaming Mode Toggle with Tooltip - Hidden on very small screens */}
-                    <div className="relative group hidden xs:block">
+                    {/* Streaming Mode Toggle with Tooltip */}
+                    <div className="relative group">
                         <button
                             type="button"
                             onClick={() => setStreamingMode(!streamingMode)}
