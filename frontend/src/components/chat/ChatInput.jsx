@@ -325,8 +325,8 @@ export default function ChatInput({ setIsThinking }) {
     }
 
     return (
-        <div className="p-4">
-            <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-3">
+        <div className="p-2 sm:p-4">
+            <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-2 sm:space-y-3">
                 {/* Streaming Status Bar */}
                 {isStreaming && audioQueue.length > 0 && (
                     <motion.div
@@ -396,19 +396,19 @@ export default function ChatInput({ setIsThinking }) {
                     </motion.div>
                 )}
 
-                <div className="flex items-center gap-2">
-                    {/* Streaming Mode Toggle with Tooltip */}
-                    <div className="relative group">
+                <div className="flex items-center gap-1 sm:gap-2">
+                    {/* Streaming Mode Toggle with Tooltip - Hidden on very small screens */}
+                    <div className="relative group hidden xs:block">
                         <button
                             type="button"
                             onClick={() => setStreamingMode(!streamingMode)}
-                            className={`p-3 rounded-full transition-all duration-200 flex-shrink-0 ${
+                            className={`p-2 sm:p-3 rounded-full transition-all duration-200 flex-shrink-0 ${
                                 streamingMode
                                     ? 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30'
                                     : 'bg-white/5 text-gray-400 hover:bg-white/10'
                             }`}
                         >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 {streamingMode ? (
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                                 ) : (
@@ -417,28 +417,28 @@ export default function ChatInput({ setIsThinking }) {
                             </svg>
                         </button>
                         {/* Tooltip */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                        <div className="absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 w-52 hidden sm:block">
                             <div className="text-xs font-medium text-white mb-1">
                                 {streamingMode ? 'Streaming Mode' : 'Classic Mode'}
                             </div>
-                            <div className="text-xs text-gray-400 max-w-48">
+                            <div className="text-xs text-gray-400 leading-relaxed">
                                 {streamingMode
                                     ? 'See responses word-by-word as they generate. Faster feel.'
                                     : 'Wait for complete response. More stable.'}
                             </div>
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                            <div className="absolute top-full left-6 border-4 border-transparent border-t-gray-900"></div>
                         </div>
                     </div>
 
                     {/* Text Input with integrated Voice Button */}
-                    <div className="flex-1 relative">
+                    <div className="flex-1 relative min-w-0">
                         <input
                             type="text"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             placeholder={isListening ? "" : (isStreaming ? "Streaming..." : "Ask a question...")}
                             disabled={loading || isListening || isStreaming}
-                            className="w-full pl-4 pr-12 py-3 bg-white/5 backdrop-blur-sm border border-white/10 rounded-full focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-white placeholder-gray-500 transition-all duration-200 text-sm"
+                            className="w-full pl-3 sm:pl-4 pr-10 sm:pr-12 py-2.5 sm:py-3 bg-white/5 backdrop-blur-sm border border-white/10 rounded-full focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-white placeholder-gray-500 transition-all duration-200 text-sm"
                         />
 
                         {/* Recording Indicator */}
@@ -490,9 +490,9 @@ export default function ChatInput({ setIsThinking }) {
                             whileTap={{ scale: 0.95 }}
                             type="button"
                             onClick={stopStreaming}
-                            className="p-3 bg-red-500 hover:bg-red-600 text-white rounded-full transition-all duration-200 shadow-lg shadow-red-500/30 flex-shrink-0"
+                            className="p-2.5 sm:p-3 bg-red-500 hover:bg-red-600 text-white rounded-full transition-all duration-200 shadow-lg shadow-red-500/30 flex-shrink-0"
                         >
-                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
                                 <rect x="6" y="6" width="12" height="12" rx="2" />
                             </svg>
                         </motion.button>
@@ -502,15 +502,15 @@ export default function ChatInput({ setIsThinking }) {
                             whileTap={{ scale: 0.95 }}
                             type="submit"
                             disabled={!input.trim() || loading || isListening}
-                            className="p-3 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-cyan-500/30 flex-shrink-0"
+                            className="p-2.5 sm:p-3 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-cyan-500/30 flex-shrink-0"
                         >
                             {loading ? (
-                                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                <svg className="animate-spin h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                                 </svg>
                             ) : (
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                                 </svg>
                             )}
