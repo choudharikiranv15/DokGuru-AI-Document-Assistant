@@ -9,11 +9,16 @@ logger = logging.getLogger(__name__)
 
 class TTSHandler:
     """Handles Text-to-Speech conversion using Piper TTS"""
-    
+
+    # Default model paths (Docker/Cloud Run)
+    MODEL_PATHS = {
+        'en_US-lessac-medium': '/app/tts_models/en_US-lessac-medium.onnx',
+    }
+
     def __init__(self, voice="en_US-lessac-medium", output_dir="./data/audio"):
         """
         Initialize Piper TTS handler
-        
+
         Args:
             voice: Voice model to use (en_US-lessac-medium, en_GB-alan-medium, etc.)
             output_dir: Directory to save generated audio files
@@ -21,10 +26,18 @@ class TTSHandler:
         self.voice = voice
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
-        
+
+        # Resolve model path - check if full path exists, otherwise use voice name
+        if voice in self.MODEL_PATHS and os.path.exists(self.MODEL_PATHS[voice]):
+            self.model_path = self.MODEL_PATHS[voice]
+            logger.info(f"Using Piper model from: {self.model_path}")
+        else:
+            # Fallback to voice name (for local development with piper installed globally)
+            self.model_path = voice
+
         # Check if piper is installed
         self.piper_available = self._check_piper_installation()
-        
+
         if not self.piper_available:
             logger.warning("Piper TTS not found. Using fallback TTS method.")
         else:
@@ -101,9 +114,9 @@ class TTSHandler:
     def _synthesize_with_piper(self, text, output_path):
         """Synthesize using Piper TTS"""
         try:
-            # Run piper command
+            # Run piper command with resolved model path
             process = subprocess.Popen(
-                ['piper', '--model', self.voice, '--output_file', output_path],
+                ['piper', '--model', self.model_path, '--output_file', output_path],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
