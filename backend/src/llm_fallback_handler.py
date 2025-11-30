@@ -602,6 +602,98 @@ class LLMFallbackHandler:
             'model': 'None'
         }
 
+    def stream_text(self, question: str, conversation_history: List[str] = None,
+                   system_prompt: Optional[str] = None,
+                   max_tokens: int = 2000,
+                   plan_type: str = 'free'):
+        """
+        Stream text response with automatic fallback across providers
+
+        Yields chunks as they arrive for real-time streaming UX.
+        Falls back to next provider on failure.
+
+        Args:
+            question: User question
+            conversation_history: Previous conversation messages
+            system_prompt: Custom system prompt
+            max_tokens: Maximum tokens to generate
+            plan_type: User's plan type ('free', 'pro', 'premium')
+
+        Yields:
+            Dict with 'type' ('chunk', 'done', 'error'), 'content', 'provider', 'model'
+        """
+        if conversation_history is None:
+            conversation_history = []
+
+        available_providers = self._get_providers_for_plan(plan_type)
+        if not available_providers:
+            available_providers = self.providers
+
+        messages = self._build_messages(question, conversation_history, system_prompt)
+        last_error = None
+
+        for i, provider in enumerate(available_providers):
+            try:
+                use_large = self._is_complex_query(question) and plan_type != 'free'
+                model = provider.get('text_model_large', provider['text_model']) if use_large else provider['text_model']
+
+                logger.info(f"Streaming from {provider['name']} ({model})...")
+
+                # Create streaming request
+                stream = provider['client'].chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=provider['temperature'],
+                    stream=True
+                )
+
+                # Yield chunks as they arrive
+                full_response = ""
+                for chunk in stream:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        content = chunk.choices[0].delta.content
+                        full_response += content
+                        yield {
+                            'type': 'chunk',
+                            'content': content,
+                            'provider': provider['name'],
+                            'model': model
+                        }
+
+                # Yield completion
+                logger.info(f"[STREAM SUCCESS] {provider['name']} - {len(full_response)} chars")
+                yield {
+                    'type': 'done',
+                    'content': full_response,
+                    'provider': provider['name'],
+                    'model': model
+                }
+                return  # Success, exit generator
+
+            except Exception as e:
+                error_msg = str(e)
+                last_error = error_msg
+                logger.warning(f"{provider['name']} streaming failed: {error_msg[:100]}")
+
+                # Check if retryable
+                is_rate_limit = any(x in error_msg.lower() for x in ['rate', 'quota', '429', 'limit'])
+                is_timeout = any(x in error_msg.lower() for x in ['timeout', 'timed out'])
+
+                if (is_rate_limit or is_timeout) and i < len(available_providers) - 1:
+                    logger.info(f"Falling back to next provider...")
+                    continue
+                elif i < len(available_providers) - 1:
+                    continue
+
+        # All providers failed
+        logger.error("All streaming providers failed!")
+        yield {
+            'type': 'error',
+            'content': "I apologize, but I'm experiencing technical difficulties. Please try again.",
+            'error': last_error or 'All providers failed'
+        }
+
     def get_provider_status(self) -> Dict[str, Any]:
         """Get status of all providers"""
         return {

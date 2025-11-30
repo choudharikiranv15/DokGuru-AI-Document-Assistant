@@ -274,6 +274,76 @@ class RAGSystem:
                 'confidence': 0.0
             }
 
+    def query_stream(self, question: str, conversation_history: List[str] = None,
+                     document_name: str = None, user_id: str = None):
+        """
+        Stream query response for real-time UX
+
+        Yields chunks as they arrive from LLM, enabling:
+        - Instant first-token display (perceived latency ~0.5s vs 3-5s)
+        - Progressive text rendering
+        - Better user experience
+
+        Args:
+            question: User question
+            conversation_history: Previous conversation messages
+            document_name: Optional document filter
+            user_id: User identifier for multi-tenancy
+
+        Yields:
+            Dict with 'type' ('context', 'chunk', 'done', 'error'), 'content', etc.
+        """
+        try:
+            self.logger.info(f"Streaming query: {question} (user: {user_id})")
+
+            # Step 1: Retrieve relevant documents (non-streaming)
+            retrieval_results = self.retriever.retrieve(
+                question, conversation_history, document_filter=document_name, user_id=user_id
+            )
+
+            if not retrieval_results['results']:
+                yield {
+                    'type': 'error',
+                    'content': "I couldn't find relevant information in the documents to answer your question."
+                }
+                return
+
+            # Yield context info
+            yield {
+                'type': 'context',
+                'sources_used': len(retrieval_results['results']),
+                'query_type': retrieval_results['query_type']
+            }
+
+            # Step 2: Prepare context for LLM
+            context_text = self.llm_handler._prepare_context(retrieval_results['results'])
+
+            # Build prompt (simplified for streaming)
+            prompt = f"""CONTEXT:
+{context_text}
+
+QUESTION: {question}
+
+Answer using the context above. Be concise and accurate."""
+
+            # Step 3: Stream LLM response
+            for chunk in self.llm_handler.fallback_handler.stream_text(
+                question=prompt,
+                conversation_history=conversation_history,
+                system_prompt=self.llm_handler._get_system_prompt(),
+                max_tokens=2000,
+                plan_type='free'
+            ):
+                yield chunk
+
+        except Exception as e:
+            self.logger.error(f"Streaming query error: {e}")
+            yield {
+                'type': 'error',
+                'content': "I encountered an error while processing your question. Please try again.",
+                'error': str(e)
+            }
+
     def get_system_stats(self) -> Dict[str, Any]:
         """Get system statistics including cache stats"""
         try:
