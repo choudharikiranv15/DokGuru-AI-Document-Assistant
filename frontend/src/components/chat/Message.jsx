@@ -16,6 +16,11 @@ function Message({ message }) {
     const pollIntervalRef = useRef(null)
     const pollAttemptsRef = useRef(0)
 
+    // Don't render streaming messages that have no content yet
+    if (message.streaming && (!message.text || message.text.trim() === '')) {
+        return null
+    }
+
     // Update state when message props change (e.g., streaming complete)
     useEffect(() => {
         if (message.audioUrl && message.audioUrl !== audioUrl) {
@@ -166,6 +171,26 @@ function Message({ message }) {
                         </div>
                     ) : (
                         <div className="markdown-content">
+                            {/* Streaming indicator */}
+                            {message.streaming && (
+                                <div className="flex items-center gap-2 mb-2 text-cyan-400">
+                                    <motion.div
+                                        className="flex gap-1"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                    >
+                                        {[0, 1, 2].map((i) => (
+                                            <motion.div
+                                                key={i}
+                                                className="w-1.5 h-1.5 bg-cyan-400 rounded-full"
+                                                animate={{ scale: [1, 1.3, 1], opacity: [0.5, 1, 0.5] }}
+                                                transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
+                                            />
+                                        ))}
+                                    </motion.div>
+                                    <span className="text-xs font-medium">Generating response...</span>
+                                </div>
+                            )}
                             <ReactMarkdown
                                 remarkPlugins={[remarkGfm]}
                                 components={{
@@ -252,6 +277,14 @@ function Message({ message }) {
                             >
                                 {message.text}
                             </ReactMarkdown>
+                            {/* Blinking cursor for streaming */}
+                            {message.streaming && (
+                                <motion.span
+                                    className="inline-block w-2 h-5 ml-1 bg-cyan-500 rounded-sm align-middle"
+                                    animate={{ opacity: [1, 0, 1] }}
+                                    transition={{ duration: 0.8, repeat: Infinity }}
+                                />
+                            )}
                         </div>
                     )}
 
