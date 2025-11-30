@@ -14,7 +14,18 @@ export default function UsageDashboard() {
     const loadUsageStats = async () => {
         try {
             const stats = await getUserLimits()
-            setUsage(stats)
+            // Transform backend response to expected format
+            const transformed = {
+                documents_used: stats.documents?.current || 0,
+                max_documents: stats.documents?.limit || 5,
+                documents_remaining: stats.documents?.remaining || 0,
+                queries_today: (stats.queries?.limit_per_day || 100) - (stats.queries?.remaining_today || 0),
+                max_queries_per_day: stats.queries?.limit_per_day || 100,
+                queries_remaining: stats.queries?.remaining_today || 0,
+                plan_type: 'beta',
+                reset_at: stats.queries?.reset_at
+            }
+            setUsage(transformed)
         } catch (error) {
             // Error logged server-side only
             toast.error('Failed to load usage statistics')
@@ -65,7 +76,7 @@ export default function UsageDashboard() {
                 </div>
                 <div>
                     <h2 className="text-xl font-bold text-white">Usage Dashboard</h2>
-                    <p className="text-sm text-gray-400">Monitor your resource usage</p>
+                    <p className="text-sm text-gray-400">Daily limits reset at midnight</p>
                 </div>
             </div>
 
