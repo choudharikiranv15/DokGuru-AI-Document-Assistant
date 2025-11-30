@@ -104,6 +104,8 @@ jobs:
       - name: Deploy to Cloud Run
         id: deploy
         run: |
+          # Deploy with --update-env-vars to preserve existing env vars
+          # This allows manually added vars (like ADMIN_SETUP_KEY) to persist
           gcloud run deploy ${{ env.SERVICE }} \
             --source backend/ \
             --region ${{ env.REGION }} \
@@ -114,14 +116,28 @@ jobs:
             --timeout 300 \
             --concurrency 10 \
             --port 8080 \
-            --set-env-vars "GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}" \
-            --set-env-vars "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
-            --set-env-vars "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" \
-            --set-env-vars "SECRET_KEY=${{ secrets.SECRET_KEY }}" \
-            --set-env-vars "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" \
-            --set-env-vars "UPSTASH_REDIS_REST_URL=${{ secrets.UPSTASH_REDIS_REST_URL }}" \
-            --set-env-vars "UPSTASH_REDIS_REST_TOKEN=${{ secrets.UPSTASH_REDIS_REST_TOKEN }}" \
-            --set-env-vars "SENTRY_DSN=${{ secrets.SENTRY_DSN }}"
+            --update-env-vars "GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}" \
+            --update-env-vars "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
+            --update-env-vars "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" \
+            --update-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }}" \
+            --update-env-vars "SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}" \
+            --update-env-vars "SECRET_KEY=${{ secrets.SECRET_KEY }}" \
+            --update-env-vars "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" \
+            --update-env-vars "GOOGLE_API_KEY=${{ secrets.GEMINI_API_KEY }}" \
+            --update-env-vars "SAMBANOVA_API_KEY=${{ secrets.SAMBANOVA_API_KEY }}" \
+            --update-env-vars "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" \
+            --update-env-vars "HUGGINGFACE_API_TOKEN=${{ secrets.HUGGINGFACE_API_TOKEN }}" \
+            --update-env-vars "COHERE_API_KEY=${{ secrets.COHERE_API_KEY }}" \
+            --update-env-vars "CEREBRAS_API_KEY=${{ secrets.CEREBRAS_API_KEY }}" \
+            --update-env-vars "MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }}" \
+            --update-env-vars "UPSTASH_REDIS_REST_URL=${{ secrets.UPSTASH_REDIS_REST_URL }}" \
+            --update-env-vars "UPSTASH_REDIS_REST_TOKEN=${{ secrets.UPSTASH_REDIS_REST_TOKEN }}" \
+            --update-env-vars "REDIS_URL=${{ secrets.REDIS_URL }}" \
+            --update-env-vars "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" \
+            --update-env-vars "POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }}" \
+            --update-env-vars "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" \
+            --update-env-vars "FRONTEND_URL=https://dokguru.vercel.app" \
+            --update-env-vars "CORS_ORIGINS=https://dokguru.vercel.app,http://localhost:5173,http://localhost:3000"
 
       - name: Get service URL
         run: |
