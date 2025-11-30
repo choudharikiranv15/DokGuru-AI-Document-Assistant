@@ -138,7 +138,7 @@ jobs:
             --update-env-vars "POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }}" \
             --update-env-vars "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" \
             --update-env-vars "FRONTEND_URL=https://dokguru.vercel.app" \
-            --update-env-vars "CORS_ORIGINS=https://dokguru.vercel.app,http://localhost:5173,http://localhost:3000"
+            --update-env-vars "CORS_ORIGINS=https://dokguru.vercel.app"
 
       - name: Get service URL
         run: |
