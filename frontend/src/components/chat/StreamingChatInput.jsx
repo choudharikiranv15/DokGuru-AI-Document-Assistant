@@ -59,9 +59,25 @@ export default function StreamingChatInput({ documentId, onMessageUpdate }) {
     }
 
     const streamChatResponse = async (question) => {
-        const token = localStorage.getItem('token')
+        // Get token from auth-storage (same as api.js interceptor)
+        let token = null
+        const authStorage = localStorage.getItem('auth-storage')
+        if (authStorage) {
+            try {
+                const authData = JSON.parse(authStorage)
+                if (authData.state && authData.state.token) {
+                    token = authData.state.token
+                }
+            } catch (error) {
+                console.error('Failed to parse auth storage:', error)
+            }
+        }
 
-        const response = await fetch(`${api.defaults.baseURL}/chat/ask-stream`, {
+        if (!token) {
+            throw new Error('Authentication required for streaming')
+        }
+
+        const response = await fetch(`${api.defaults.baseURL}/ask-stream`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

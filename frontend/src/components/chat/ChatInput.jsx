@@ -18,6 +18,8 @@ export default function ChatInput({ setIsThinking }) {
     const [currentAudioIndex, setCurrentAudioIndex] = useState(0)
     const [isPlayingAudio, setIsPlayingAudio] = useState(false)
     const [isMuted, setIsMuted] = useState(false)
+    const [streamingComplete, setStreamingComplete] = useState(false) // Track when all audio received
+    const [totalExpectedAudio, setTotalExpectedAudio] = useState(0) // Total sentences to play
 
     const recognitionRef = useRef(null)
     const audioRef = useRef(null)
@@ -89,6 +91,8 @@ export default function ChatInput({ setIsThinking }) {
 
     const handleStreamingSubmit = async (userMessage) => {
         setIsStreaming(true)
+        setStreamingComplete(false) // Reset streaming complete flag
+        setTotalExpectedAudio(0)
         // Don't set isThinking in streaming mode - the streaming message placeholder shows progress
         setCurrentStreamMessage('')
         setAudioQueue([])
@@ -118,7 +122,23 @@ export default function ChatInput({ setIsThinking }) {
     }
 
     const streamChatResponse = async (question, messageId) => {
-        const token = localStorage.getItem('token')
+        // Get token from auth-storage (same as api.js interceptor)
+        let token = null
+        const authStorage = localStorage.getItem('auth-storage')
+        if (authStorage) {
+            try {
+                const authData = JSON.parse(authStorage)
+                if (authData.state && authData.state.token) {
+                    token = authData.state.token
+                }
+            } catch (error) {
+                console.error('Failed to parse auth storage:', error)
+            }
+        }
+
+        if (!token) {
+            throw new Error('Authentication required for streaming')
+        }
 
         const response = await fetch(`${api.defaults.baseURL}/ask-stream`, {
             method: 'POST',
@@ -142,6 +162,7 @@ export default function ChatInput({ setIsThinking }) {
         const decoder = new TextDecoder()
         let buffer = ''
         let fullText = ''
+        let collectedAudioUrls = [] // Track audio URLs locally for closure access
 
         while (true) {
             const { done, value } = await reader.read()
@@ -167,6 +188,8 @@ export default function ChatInput({ setIsThinking }) {
                                 break
 
                             case 'audio':
+                                // Track audio URL locally and in state
+                                collectedAudioUrls.push(data.audio_url)
                                 setAudioQueue(prev => [...prev, {
                                     sentence_id: data.sentence_id,
                                     url: data.audio_url,
@@ -175,10 +198,22 @@ export default function ChatInput({ setIsThinking }) {
                                 break
 
                             case 'done':
+                                // Use locally tracked audio URLs (state may not be updated yet due to closure)
+                                const firstAudioUrl = collectedAudioUrls.length > 0 ? collectedAudioUrls[0] : null
+
+                                // Mark streaming as complete - audio will stop after last sentence
+                                setStreamingComplete(true)
+                                setTotalExpectedAudio(collectedAudioUrls.length)
+
                                 updateMessage(messageId, {
                                     text: data.full_response,
                                     streaming: false,
-                                    metadata: { sources: data.sources }
+                                    streamingGenerated: true, // Mark as generated via streaming (hides "Generate Audio" button)
+                                    metadata: { sources: data.sources, sources_used: data.sources_used },
+                                    // Set audio URL so the audio player shows up
+                                    audioUrl: firstAudioUrl,
+                                    audioReady: collectedAudioUrls.length > 0,
+                                    audioGenerating: false
                                 })
                                 break
 
@@ -194,19 +229,38 @@ export default function ChatInput({ setIsThinking }) {
         }
     }
 
-    // Auto-play audio queue
+    // Auto-play audio queue during streaming
+    // Stops automatically when streaming is complete and all audio has played
     useEffect(() => {
-        if (audioQueue.length > currentAudioIndex && !isPlayingAudio && !isMuted && streamingMode) {
+        // Only auto-play if:
+        // 1. There's audio in the queue to play
+        // 2. Not currently playing
+        // 3. Not muted
+        // 4. In streaming mode
+        // 5. Either still streaming OR haven't played all audio yet
+        const hasMoreAudio = audioQueue.length > currentAudioIndex
+        const shouldAutoPlay = hasMoreAudio && !isPlayingAudio && !isMuted && streamingMode
+
+        if (shouldAutoPlay) {
+            // If streaming is complete and we've played all audio, don't auto-play more
+            if (streamingComplete && currentAudioIndex >= totalExpectedAudio) {
+                return // Stop auto-play - user can use audio player to replay
+            }
             playNextAudio()
         }
-    }, [audioQueue, currentAudioIndex, isMuted, streamingMode])
+    }, [audioQueue, currentAudioIndex, isMuted, streamingMode, streamingComplete, totalExpectedAudio, isPlayingAudio])
 
     const playNextAudio = () => {
         if (currentAudioIndex >= audioQueue.length || isMuted || !audioRef.current) return
 
         const audioItem = audioQueue[currentAudioIndex]
         setIsPlayingAudio(true)
-        audioRef.current.src = audioItem.url
+
+        // Construct full URL with API base
+        const baseUrl = api.defaults.baseURL
+        const fullUrl = audioItem.url.startsWith('http') ? audioItem.url : `${baseUrl}${audioItem.url}`
+
+        audioRef.current.src = fullUrl
         audioRef.current.play()
             .catch(err => {
                 console.error('Audio play error:', err)

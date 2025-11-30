@@ -307,7 +307,7 @@ export default function Landing() {
                 </nav>
 
                 {/* Hero Section with Wave Background */}
-                <section ref={heroRef} className="min-h-[90vh] flex items-center justify-center px-4 md:px-6 py-12 md:py-20 relative">
+                <section ref={heroRef} className="min-h-[85vh] sm:min-h-[90vh] flex items-center justify-center px-4 sm:px-6 py-8 sm:py-12 md:py-20 relative">
                     {/* Wave Background */}
                     <WaveBackground />
 
@@ -322,7 +322,7 @@ export default function Landing() {
                             >
                                 <motion.h1
                                     variants={fadeInUp}
-                                    className="text-5xl md:text-6xl lg:text-7xl font-bold text-white leading-tight"
+                                    className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold text-white leading-tight"
                                 >
                                     Talk to your documents.{' '}
                                     <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-500 to-pink-500">
@@ -333,7 +333,7 @@ export default function Landing() {
 
                                 <motion.p
                                     variants={fadeInUp}
-                                    className="text-xl text-gray-300 leading-relaxed"
+                                    className="text-base sm:text-lg md:text-xl text-gray-300 leading-relaxed"
                                 >
                                     Upload PDFs, ask questions, and get AI-powered voice answers — in English, Hindi, or Kannada.
                                 </motion.p>
@@ -341,7 +341,7 @@ export default function Landing() {
                                 {/* Tagline */}
                                 <motion.p
                                     variants={fadeInUp}
-                                    className="text-3xl md:text-4xl lg:text-5xl font-bold text-white drop-shadow-[0_0_20px_rgba(6,182,212,0.5)]"
+                                    className="text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold text-white drop-shadow-[0_0_20px_rgba(6,182,212,0.5)]"
                                     style={{
                                         textShadow: '0 0 30px rgba(6,182,212,0.8), 0 0 60px rgba(139,92,246,0.6)'
                                     }}
@@ -351,19 +351,19 @@ export default function Landing() {
 
                                 <motion.div
                                     variants={fadeInUp}
-                                    className="flex flex-col sm:flex-row gap-4"
+                                    className="flex flex-col sm:flex-row gap-3 sm:gap-4"
                                 >
                                     <Link
                                         to="/signup"
-                                        className="group px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-lg font-semibold rounded-2xl transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/50 flex items-center justify-center gap-2"
+                                        className="group px-6 py-3 sm:px-8 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-base sm:text-lg font-semibold rounded-xl sm:rounded-2xl transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/50 flex items-center justify-center gap-2"
                                     >
                                         Try for Free
-                                        <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                                         </svg>
                                     </Link>
-                                    <button className="px-8 py-4 bg-cyan-500/20 backdrop-blur-sm hover:bg-cyan-500/30 border-2 border-cyan-500/50 text-white text-lg font-semibold rounded-2xl transition-all duration-300 hover:scale-105 flex items-center justify-center gap-2">
-                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                    <button className="px-6 py-3 sm:px-8 sm:py-4 bg-cyan-500/20 backdrop-blur-sm hover:bg-cyan-500/30 border-2 border-cyan-500/50 text-white text-base sm:text-lg font-semibold rounded-xl sm:rounded-2xl transition-all duration-300 hover:scale-105 flex items-center justify-center gap-2">
+                                        <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
                                             <path d="M8 5v14l11-7z" />
                                         </svg>
                                         Watch Demo
@@ -371,12 +371,12 @@ export default function Landing() {
                                 </motion.div>
                             </motion.div>
 
-                            {/* Right: Desktop Monitor */}
+                            {/* Right: Desktop Monitor - Hidden on small mobile, shown on larger screens */}
                             <motion.div
                                 initial={{ opacity: 0, y: 50 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.8, delay: 0.2 }}
-                                className="relative"
+                                className="relative hidden sm:block"
                             >
                                 {/* Desktop Monitor */}
                                 <motion.div
@@ -455,7 +455,7 @@ export default function Landing() {
                 </section>
 
                 {/* Features Section */}
-                <section id="features" className="py-12 md:py-20 px-4 md:px-6 bg-black/30 backdrop-blur-sm">
+                <section id="features" className="py-10 sm:py-12 md:py-20 px-4 sm:px-6 bg-black/30 backdrop-blur-sm">
                     <div className="max-w-7xl mx-auto">
                         <motion.div
                             initial="hidden"
@@ -466,13 +466,13 @@ export default function Landing() {
                         >
                             <motion.h2
                                 variants={fadeInUp}
-                                className="text-4xl md:text-5xl font-bold text-white mb-4"
+                                className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4"
                             >
                                 Why Choose DokGuru?
                             </motion.h2>
                             <motion.p
                                 variants={fadeInUp}
-                                className="text-xl text-gray-400 max-w-2xl mx-auto"
+                                className="text-base sm:text-lg md:text-xl text-gray-400 max-w-2xl mx-auto px-4"
                             >
                                 Powerful features designed to make learning from documents effortless
                             </motion.p>
@@ -483,7 +483,7 @@ export default function Landing() {
                             whileInView="visible"
                             viewport={{ once: true }}
                             variants={staggerContainer}
-                            className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8"
+                            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 lg:gap-8"
                         >
                             {[
                                 {
@@ -511,11 +511,11 @@ export default function Landing() {
                                     key={i}
                                     variants={fadeInUp}
                                     whileHover={{ scale: 1.05, y: -5 }}
-                                    className="group p-8 bg-white/5 backdrop-blur-sm border border-white/10 rounded-3xl hover:bg-gradient-to-br hover:from-cyan-500/10 hover:to-purple-500/10 hover:border-cyan-500/50 transition-all duration-300 cursor-pointer"
+                                    className="group p-5 sm:p-6 md:p-8 bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl sm:rounded-3xl hover:bg-gradient-to-br hover:from-cyan-500/10 hover:to-purple-500/10 hover:border-cyan-500/50 transition-all duration-300 cursor-pointer"
                                 >
-                                    <div className="text-5xl mb-4">{feature.icon}</div>
-                                    <h3 className="text-xl font-semibold text-white mb-3">{feature.title}</h3>
-                                    <p className="text-gray-400 leading-relaxed">{feature.description}</p>
+                                    <div className="text-3xl sm:text-4xl md:text-5xl mb-3 sm:mb-4">{feature.icon}</div>
+                                    <h3 className="text-lg sm:text-xl font-semibold text-white mb-2 sm:mb-3">{feature.title}</h3>
+                                    <p className="text-sm sm:text-base text-gray-400 leading-relaxed">{feature.description}</p>
                                 </motion.div>
                             ))}
                         </motion.div>
@@ -523,7 +523,7 @@ export default function Landing() {
                 </section>
 
                 {/* How It Works */}
-                <section id="how-it-works" className="py-12 md:py-20 px-4 md:px-6">
+                <section id="how-it-works" className="py-10 sm:py-12 md:py-20 px-4 sm:px-6">
                     <div className="max-w-7xl mx-auto">
                         <motion.div
                             initial="hidden"
@@ -534,7 +534,7 @@ export default function Landing() {
                         >
                             <motion.h2
                                 variants={fadeInUp}
-                                className="text-4xl md:text-5xl font-bold text-white mb-4"
+                                className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4 px-4"
                             >
                                 Learn Smarter in 3 Simple Steps
                             </motion.h2>
@@ -545,7 +545,7 @@ export default function Landing() {
                             whileInView="visible"
                             viewport={{ once: true }}
                             variants={staggerContainer}
-                            className="grid md:grid-cols-3 gap-6 md:gap-8"
+                            className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8"
                         >
                             {/* Step 1: Upload PDF */}
                             <motion.div
@@ -880,7 +880,7 @@ export default function Landing() {
                 </section> */}
 
                 {/* Pricing Section */}
-                <section id="pricing" className="py-12 md:py-20 px-4 md:px-6">
+                <section id="pricing" className="py-10 sm:py-12 md:py-20 px-4 sm:px-6">
                     <div className="max-w-7xl mx-auto">
                         <motion.div
                             initial="hidden"
@@ -891,13 +891,13 @@ export default function Landing() {
                         >
                             <motion.h2
                                 variants={fadeInUp}
-                                className="text-4xl md:text-5xl font-bold text-white mb-4"
+                                className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4"
                             >
                                 Simple, Transparent Pricing
                             </motion.h2>
                             <motion.p
                                 variants={fadeInUp}
-                                className="text-xl text-gray-400"
+                                className="text-base sm:text-lg md:text-xl text-gray-400"
                             >
                                 Free during beta • Affordable plans for everyone
                             </motion.p>
@@ -908,7 +908,7 @@ export default function Landing() {
                             whileInView="visible"
                             viewport={{ once: true }}
                             variants={staggerContainer}
-                            className="grid md:grid-cols-3 gap-4 md:gap-8 max-w-6xl mx-auto"
+                            className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 lg:gap-8 max-w-6xl mx-auto"
                         >
                             {[
                                 {
@@ -970,7 +970,7 @@ export default function Landing() {
                                     key={i}
                                     variants={fadeInUp}
                                     whileHover={{ scale: 1.05, y: -10 }}
-                                    className={`relative p-8 rounded-3xl border transition-all duration-300 ${plan.popular
+                                    className={`relative p-5 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl border transition-all duration-300 ${plan.popular
                                             ? 'bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-purple-500/50 shadow-2xl shadow-purple-500/20'
                                             : 'bg-white/5 backdrop-blur-sm border-white/10 hover:border-cyan-500/30'
                                         }`}
@@ -985,14 +985,14 @@ export default function Landing() {
                                             {plan.badge}
                                         </div>
                                     )}
-                                    <div className="text-center mb-8">
-                                        <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
+                                    <div className="text-center mb-6 sm:mb-8">
+                                        <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">{plan.name}</h3>
                                         <div className="flex items-end justify-center gap-1">
-                                            <span className="text-5xl font-bold text-white">{plan.price}</span>
-                                            <span className="text-gray-400 mb-2">{plan.period}</span>
+                                            <span className="text-3xl sm:text-4xl md:text-5xl font-bold text-white">{plan.price}</span>
+                                            <span className="text-sm sm:text-base text-gray-400 mb-2">{plan.period}</span>
                                         </div>
                                     </div>
-                                    <ul className="space-y-4 mb-8">
+                                    <ul className="space-y-3 sm:space-y-4 mb-6 sm:mb-8">
                                         {plan.features.map((feature, j) => (
                                             <li key={j} className="flex items-center gap-3 text-gray-300">
                                                 <svg className="w-5 h-5 text-cyan-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -1020,23 +1020,23 @@ export default function Landing() {
                 </section>
 
                 {/* CTA Section */}
-                <section className="py-12 md:py-20 px-4 md:px-6 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-cyan-500/20 backdrop-blur-sm">
+                <section className="py-10 sm:py-12 md:py-20 px-4 sm:px-6 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-cyan-500/20 backdrop-blur-sm">
                     <motion.div
                         initial="hidden"
                         whileInView="visible"
                         viewport={{ once: true }}
                         variants={staggerContainer}
-                        className="max-w-4xl mx-auto text-center space-y-8"
+                        className="max-w-4xl mx-auto text-center space-y-6 sm:space-y-8"
                     >
                         <motion.h2
                             variants={fadeInUp}
-                            className="text-4xl md:text-5xl font-bold text-white"
+                            className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white"
                         >
                             From Reading to Understanding.
                         </motion.h2>
                         <motion.p
                             variants={fadeInUp}
-                            className="text-xl text-gray-300"
+                            className="text-base sm:text-lg md:text-xl text-gray-300"
                         >
                             Start your AI learning journey today.
                         </motion.p>
@@ -1046,7 +1046,7 @@ export default function Landing() {
                         >
                             <Link
                                 to="/signup"
-                                className="px-10 py-4 bg-white text-purple-600 hover:bg-gray-100 text-lg font-semibold rounded-2xl transition-all duration-200 hover:scale-105 shadow-lg"
+                                className="px-6 sm:px-10 py-3 sm:py-4 bg-white text-purple-600 hover:bg-gray-100 text-base sm:text-lg font-semibold rounded-xl sm:rounded-2xl transition-all duration-200 hover:scale-105 shadow-lg"
                             >
                                 Start Free Today
                             </Link>
@@ -1055,9 +1055,9 @@ export default function Landing() {
                 </section>
 
                 {/* Footer */}
-                <footer className="bg-black/60 backdrop-blur-xl border-t border-white/10 py-12 md:py-16 px-4 md:px-6">
+                <footer className="bg-black/60 backdrop-blur-xl border-t border-white/10 py-10 sm:py-12 md:py-16 px-4 sm:px-6">
                     <div className="max-w-7xl mx-auto">
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 md:gap-12 mb-12">
+                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-5 gap-6 sm:gap-8 md:gap-12 mb-10 sm:mb-12">
                             {/* Brand Section */}
                             <div className="col-span-2 md:col-span-2 space-y-6">
                                 <div>

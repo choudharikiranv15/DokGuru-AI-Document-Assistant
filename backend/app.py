@@ -1,5 +1,6 @@
 # app_flask.py - Flask interface for RAG System with Voice Support
-from flask import Flask, render_template, request, jsonify, session, send_file
+from flask import Flask, render_template, request, jsonify, session, send_file, make_response, Response
+import re
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -154,8 +155,15 @@ atexit.register(cleanup_thread_pool)
 atexit.register(cleanup_redis)
 
 # Handle signals for Docker/Kubernetes graceful shutdown
-signal.signal(signal.SIGTERM, lambda s, f: cleanup_thread_pool())
-signal.signal(signal.SIGINT, lambda s, f: cleanup_thread_pool())
+def graceful_shutdown(signum, frame):
+    """Handle shutdown signals gracefully"""
+    cleanup_thread_pool()
+    cleanup_redis()
+    import sys
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, graceful_shutdown)
+signal.signal(signal.SIGINT, graceful_shutdown)
 
 # Initialize Sentry for error tracking (non-fatal)
 try:
@@ -1437,7 +1445,7 @@ def ask_question():
         import threading
 
         audio_id = hashlib.md5(response['answer'].encode()).hexdigest()[:12]
-        audio_filename = f"auto_{audio_id}.wav"
+        audio_filename = f"auto_{audio_id}.mp3"  # TTS handlers output MP3 format
         audio_url = f"/audio/{audio_filename}"
 
         # Use thread pool for better resource management
@@ -1554,83 +1562,57 @@ def ask_question_stream():
         @stream_with_context
         def generate():
             try:
-                # Get context from RAG system
-                context_result = rag_system.retrieve_context(
+                # Use the regular RAG query to get the full response
+                # (True LLM streaming requires accessing retriever directly)
+                response = rag_system.query(
                     question,
                     conversation_history,
                     document_name=document_name,
                     user_id=user_id
                 )
 
-                context = context_result.get('context', '')
-                sources = context_result.get('sources', [])
+                full_response = response.get('answer', '')
+                sources_used = response.get('sources_used', 0)
 
-                # Build prompt for LLM
-                prompt = f"""Based on the following context, answer the question concisely and accurately.
-
-Context:
-{context}
-
-Question: {question}
-
-Answer in {language}. Cite page numbers if available."""
-
-                # Stream from LLM
-                from src.llm_handler import get_groq_streaming_response
-
-                buffer = ""
+                # Stream the response text sentence by sentence
+                import re as regex
+                sentences = regex.split(r'(?<=[.!?])\s+', full_response)
                 sentence_count = 0
-                full_response = ""
-                audio_queue = []
 
-                for chunk_text in get_groq_streaming_response(prompt):
-                    if not chunk_text:
+                for sentence in sentences:
+                    if not sentence.strip():
                         continue
 
-                    buffer += chunk_text
-                    full_response += chunk_text
-
-                    # Check for sentence boundary
-                    if re.search(r'[.!?]\s*$', buffer) and len(buffer.strip()) > 20:
-                        sentence = buffer.strip()
-                        sentence_count += 1
-
-                        # Send text immediately
-                        yield f"data: {json.dumps({'type': 'text', 'content': sentence, 'sentence_id': sentence_count})}\n\n"
-
-                        # Generate TTS in background
-                        try:
-                            import hashlib
-                            audio_id = f"stream_{user_id}_{sentence_count}_{hashlib.md5(sentence.encode()).hexdigest()[:8]}"
-
-                            # Generate audio (synchronous for now - can be async later)
-                            tts_result = tts_handler.synthesize(
-                                sentence,
-                                language=language,
-                                output_filename=audio_id
-                            )
-
-                            if tts_result.get('success'):
-                                audio_data = {
-                                    'type': 'audio',
-                                    'sentence_id': sentence_count,
-                                    'audio_url': tts_result.get('audio_url'),
-                                    'duration': tts_result.get('duration', 0),
-                                    'engine': tts_result.get('engine', 'unknown')
-                                }
-                                yield f"data: {json.dumps(audio_data)}\n\n"
-                        except Exception as tts_error:
-                            logger.error(f"TTS generation error: {tts_error}")
-
-                        buffer = ""
-
-                # Send remaining text
-                if buffer.strip():
                     sentence_count += 1
-                    yield f"data: {json.dumps({'type': 'text', 'content': buffer.strip(), 'sentence_id': sentence_count})}\n\n"
+
+                    # Send text chunk
+                    yield f"data: {json.dumps({'type': 'text', 'content': sentence.strip(), 'sentence_id': sentence_count})}\n\n"
+
+                    # Generate TTS for this sentence
+                    try:
+                        import hashlib
+                        audio_id = f"stream_{user_id[:8]}_{sentence_count}_{hashlib.md5(sentence.encode()).hexdigest()[:8]}"
+
+                        tts_result = tts_handler.synthesize(
+                            sentence.strip(),
+                            language=language,
+                            output_filename=audio_id
+                        )
+
+                        if tts_result.get('filename'):
+                            audio_data = {
+                                'type': 'audio',
+                                'sentence_id': sentence_count,
+                                'audio_url': f"/audio/{tts_result.get('filename')}",
+                                'duration': tts_result.get('duration', 0),
+                                'engine': tts_result.get('engine', 'unknown')
+                            }
+                            yield f"data: {json.dumps(audio_data)}\n\n"
+                    except Exception as tts_error:
+                        logger.error(f"TTS generation error: {tts_error}")
 
                 # Send completion
-                yield f"data: {json.dumps({'type': 'done', 'full_response': full_response, 'sources': sources, 'total_sentences': sentence_count})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'full_response': full_response, 'sources_used': sources_used, 'total_sentences': sentence_count})}\n\n"
 
                 # Update conversation history
                 conversation_history.append(question)
@@ -1838,10 +1820,10 @@ def text_to_speech_stream():
         return jsonify({'success': False, 'message': str(e)}), 500
 
 
-@app.route('/audio/<filename>', methods=['GET'])
+@app.route('/audio/<filename>', methods=['GET', 'HEAD'])
 @limiter.exempt  # Audio files don't need rate limiting
 def serve_audio(filename):
-    """Serve generated audio files (supports both WAV and MP3)"""
+    """Serve generated audio files with proper Range support for streaming"""
     try:
         audio_path = os.path.join(app.config['AUDIO_FOLDER'], filename)
         if not os.path.exists(audio_path):
@@ -1849,7 +1831,58 @@ def serve_audio(filename):
 
         # Determine MIME type based on extension
         mimetype = 'audio/mpeg' if filename.endswith('.mp3') else 'audio/wav'
-        return send_file(audio_path, mimetype=mimetype)
+
+        # Get file size
+        file_size = os.path.getsize(audio_path)
+
+        # Handle HEAD request
+        if request.method == 'HEAD':
+            response = make_response('')
+            response.headers['Content-Type'] = mimetype
+            response.headers['Content-Length'] = file_size
+            response.headers['Accept-Ranges'] = 'bytes'
+            return response
+
+        # Handle Range requests for proper audio streaming/seeking
+        range_header = request.headers.get('Range', None)
+
+        if range_header:
+            # Parse range header (e.g., "bytes=0-1000")
+            byte_start = 0
+            byte_end = file_size - 1
+
+            match = re.match(r'bytes=(\d+)-(\d*)', range_header)
+            if match:
+                byte_start = int(match.group(1))
+                if match.group(2):
+                    byte_end = int(match.group(2))
+
+            # Ensure valid range
+            byte_end = min(byte_end, file_size - 1)
+            content_length = byte_end - byte_start + 1
+
+            # Read the requested byte range
+            with open(audio_path, 'rb') as f:
+                f.seek(byte_start)
+                data = f.read(content_length)
+
+            # Return 206 Partial Content
+            response = make_response(data)
+            response.status_code = 206
+            response.headers['Content-Type'] = mimetype
+            response.headers['Content-Length'] = content_length
+            response.headers['Content-Range'] = f'bytes {byte_start}-{byte_end}/{file_size}'
+            response.headers['Accept-Ranges'] = 'bytes'
+            # CORS headers for audio playback
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Range, Accept-Ranges'
+            return response
+
+        # No Range header - return full file with Accept-Ranges header
+        response = send_file(audio_path, mimetype=mimetype, conditional=True)
+        # Note: send_file returns a Response object, we can't add headers directly
+        # CORS is handled globally by flask-cors
+        return response
     except Exception as e:
         logger.error(f"Audio serve error: {str(e)}")
         return jsonify({'success': False, 'message': str(e)}), 500

@@ -27,59 +27,59 @@ export default function PrivacyPolicy() {
             </header>
 
             {/* Content */}
-            <div className="max-w-4xl mx-auto px-4 py-16">
+            <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12 md:py-16">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6 }}
                 >
                     {/* Title */}
-                    <div className="mb-12">
-                        <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-cyan-400 to-purple-600 bg-clip-text text-transparent">
+                    <div className="mb-8 sm:mb-10 md:mb-12">
+                        <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 bg-gradient-to-r from-cyan-400 to-purple-600 bg-clip-text text-transparent">
                             Privacy Policy
                         </h1>
-                        <p className="text-gray-400 text-lg">
+                        <p className="text-gray-400 text-sm sm:text-base md:text-lg">
                             Last updated: November 21, 2025
                         </p>
-                        <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                            <p className="text-blue-300 text-sm">
+                        <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                            <p className="text-blue-300 text-xs sm:text-sm">
                                 <strong>Note:</strong> DokGuru is currently in beta. This privacy policy explains how we handle your data truthfully and transparently.
                             </p>
                         </div>
                     </div>
 
                     {/* Content Sections */}
-                    <div className="space-y-8 text-gray-300">
+                    <div className="space-y-6 sm:space-y-8 text-gray-300">
                         {/* Introduction */}
                         <section>
-                            <h2 className="text-2xl font-semibold text-white mb-4">Introduction</h2>
-                            <p className="leading-relaxed">
+                            <h2 className="text-xl sm:text-2xl font-semibold text-white mb-3 sm:mb-4">Introduction</h2>
+                            <p className="leading-relaxed text-sm sm:text-base">
                                 DokGuru ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our AI-powered document intelligence platform with voice interaction.
                             </p>
                         </section>
 
                         {/* Information We Collect */}
                         <section>
-                            <h2 className="text-2xl font-semibold text-white mb-4">1. Information We Collect</h2>
+                            <h2 className="text-xl sm:text-2xl font-semibold text-white mb-3 sm:mb-4">1. Information We Collect</h2>
 
-                            <h3 className="text-xl font-semibold text-cyan-400 mb-3 mt-6">1.1 Account Information</h3>
-                            <ul className="list-disc list-inside space-y-2 ml-4">
+                            <h3 className="text-base sm:text-lg md:text-xl font-semibold text-cyan-400 mb-2 sm:mb-3 mt-4 sm:mt-6">1.1 Account Information</h3>
+                            <ul className="list-disc list-inside space-y-1.5 sm:space-y-2 ml-2 sm:ml-4 text-sm sm:text-base">
                                 <li>Email address (required for authentication)</li>
                                 <li>Password (hashed using bcrypt - we never store plain text passwords)</li>
                                 <li>Role and institution (optional, provided during signup)</li>
                                 <li>Account creation and last login timestamps</li>
                             </ul>
 
-                            <h3 className="text-xl font-semibold text-cyan-400 mb-3 mt-6">1.2 Document Data</h3>
-                            <ul className="list-disc list-inside space-y-2 ml-4">
+                            <h3 className="text-base sm:text-lg md:text-xl font-semibold text-cyan-400 mb-2 sm:mb-3 mt-4 sm:mt-6">1.2 Document Data</h3>
+                            <ul className="list-disc list-inside space-y-1.5 sm:space-y-2 ml-2 sm:ml-4 text-sm sm:text-base">
                                 <li>PDF documents you upload to the platform</li>
                                 <li>Document metadata (filename, upload time, size)</li>
                                 <li>Document categories and tags (if you add them)</li>
                                 <li>Vector embeddings of your documents (for AI search)</li>
                             </ul>
 
-                            <h3 className="text-xl font-semibold text-cyan-400 mb-3 mt-6">1.3 Usage Data</h3>
-                            <ul className="list-disc list-inside space-y-2 ml-4">
+                            <h3 className="text-base sm:text-lg md:text-xl font-semibold text-cyan-400 mb-2 sm:mb-3 mt-4 sm:mt-6">1.3 Usage Data</h3>
+                            <ul className="list-disc list-inside space-y-1.5 sm:space-y-2 ml-2 sm:ml-4 text-sm sm:text-base">
                                 <li>Questions you ask and AI responses generated</li>
                                 <li>Voice recordings (temporarily, for transcription only - not stored permanently)</li>
                                 <li>Conversation history (stored in Redis cache, auto-expires)</li>
@@ -87,8 +87,8 @@ export default function PrivacyPolicy() {
                                 <li>Feedback and ratings you provide</li>
                             </ul>
 
-                            <h3 className="text-xl font-semibold text-cyan-400 mb-3 mt-6">1.4 Technical Data</h3>
-                            <ul className="list-disc list-inside space-y-2 ml-4">
+                            <h3 className="text-base sm:text-lg md:text-xl font-semibold text-cyan-400 mb-2 sm:mb-3 mt-4 sm:mt-6">1.4 Technical Data</h3>
+                            <ul className="list-disc list-inside space-y-1.5 sm:space-y-2 ml-2 sm:ml-4 text-sm sm:text-base">
                                 <li>IP address and browser information</li>
                                 <li>Device type and screen resolution</li>
                                 <li>Error logs and performance data (via Sentry)</li>
@@ -98,9 +98,9 @@ export default function PrivacyPolicy() {
 
                         {/* How We Use Your Information */}
                         <section>
-                            <h2 className="text-2xl font-semibold text-white mb-4">2. How We Use Your Information</h2>
-                            <p className="mb-4">We use your data for the following purposes:</p>
-                            <ul className="list-disc list-inside space-y-2 ml-4">
+                            <h2 className="text-xl sm:text-2xl font-semibold text-white mb-3 sm:mb-4">2. How We Use Your Information</h2>
+                            <p className="mb-3 sm:mb-4 text-sm sm:text-base">We use your data for the following purposes:</p>
+                            <ul className="list-disc list-inside space-y-1.5 sm:space-y-2 ml-2 sm:ml-4 text-sm sm:text-base">
                                 <li><strong>Service Delivery:</strong> To provide AI-powered document Q&A and voice features</li>
                                 <li><strong>Authentication:</strong> To manage your account and secure access</li>
                                 <li><strong>Improvement:</strong> To analyze usage patterns and improve our service</li>
@@ -112,13 +112,13 @@ export default function PrivacyPolicy() {
 
                         {/* Third-Party Services */}
                         <section>
-                            <h2 className="text-2xl font-semibold text-white mb-4">3. Third-Party Services We Use</h2>
-                            <p className="mb-4">We use the following trusted third-party services. Each has their own privacy policy:</p>
+                            <h2 className="text-xl sm:text-2xl font-semibold text-white mb-3 sm:mb-4">3. Third-Party Services We Use</h2>
+                            <p className="mb-3 sm:mb-4 text-sm sm:text-base">We use the following trusted third-party services. Each has their own privacy policy:</p>
 
-                            <div className="space-y-4 ml-4">
-                                <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-                                    <h4 className="font-semibold text-white mb-2">🗄️ Supabase (Database & Auth)</h4>
-                                    <p className="text-sm">Stores your account info, documents metadata, and usage data</p>
+                            <div className="space-y-3 sm:space-y-4 ml-0 sm:ml-4">
+                                <div className="p-3 sm:p-4 bg-white/5 rounded-lg border border-white/10">
+                                    <h4 className="font-semibold text-white text-sm sm:text-base mb-1 sm:mb-2">🗄️ Supabase (Database & Auth)</h4>
+                                    <p className="text-xs sm:text-sm">Stores your account info, documents metadata, and usage data</p>
                                     <a href="https://supabase.com/privacy" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 text-sm">View Privacy Policy →</a>
                                 </div>
 
@@ -226,12 +226,12 @@ export default function PrivacyPolicy() {
                         </section>
 
                         {/* Contact */}
-                        <section className="p-6 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-500/20 rounded-xl">
-                            <h2 className="text-2xl font-semibold text-white mb-4">10. Contact Us</h2>
-                            <p className="mb-4">
+                        <section className="p-4 sm:p-6 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-500/20 rounded-xl">
+                            <h2 className="text-xl sm:text-2xl font-semibold text-white mb-3 sm:mb-4">10. Contact Us</h2>
+                            <p className="mb-3 sm:mb-4 text-sm sm:text-base">
                                 If you have questions about this Privacy Policy or want to exercise your rights, contact us:
                             </p>
-                            <ul className="space-y-2">
+                            <ul className="space-y-1.5 sm:space-y-2 text-sm sm:text-base">
                                 <li>📧 Email: <a href="mailto:contact@dokguru.com" className="text-cyan-400 hover:text-cyan-300">contact@dokguru.com</a></li>
                                 <li>🐛 GitHub Issues: <a href="https://github.com/choudharikiranv15/DocuMind-Voice-QA-System/issues" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300">Report on GitHub</a></li>
                                 <li>👤 Developer: <a href="https://www.linkedin.com/in/kiranchoudhari-1510m" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300">Kiran Choudhari on LinkedIn</a></li>
@@ -239,9 +239,9 @@ export default function PrivacyPolicy() {
                         </section>
 
                         {/* Summary */}
-                        <section className="p-6 bg-green-500/10 border border-green-500/20 rounded-xl">
-                            <h3 className="text-xl font-semibold text-green-400 mb-3">🌟 Privacy Promise</h3>
-                            <ul className="space-y-2 text-sm">
+                        <section className="p-4 sm:p-6 bg-green-500/10 border border-green-500/20 rounded-xl">
+                            <h3 className="text-lg sm:text-xl font-semibold text-green-400 mb-2 sm:mb-3">🌟 Privacy Promise</h3>
+                            <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
                                 <li>✅ We only collect data necessary to provide the service</li>
                                 <li>✅ We never sell your data to third parties</li>
                                 <li>✅ You can delete your account and data anytime</li>

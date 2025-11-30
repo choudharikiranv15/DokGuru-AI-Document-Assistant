@@ -143,10 +143,14 @@ class LLMHandler:
     def _prepare_context(self, context_docs: List[Dict[str, Any]]) -> str:
         """Prepare context from retrieved documents with smart truncation"""
         context_parts = []
-        max_context_tokens = 4000  # Leave room for system prompt, query, and response
+        # Reduced to fit within Groq's 6k TPM limit (leave 2k for prompt+response)
+        max_context_tokens = 3000
         estimated_tokens = 0
 
-        for i, doc in enumerate(context_docs, 1):
+        # Limit to top 3 most relevant docs to avoid token overflow
+        docs_to_use = context_docs[:3]
+
+        for i, doc in enumerate(docs_to_use, 1):
             content = doc['content']
             metadata = doc['metadata']
 
@@ -173,6 +177,7 @@ class LLMHandler:
             if estimated_tokens >= max_context_tokens:
                 break
 
+        self.logger.info(f"📊 Context prepared: {estimated_tokens} estimated tokens from {len(context_parts)} docs")
         return "\n".join(context_parts)
     
     def _build_conversation_context(self, conversation_history: List[str]) -> str:

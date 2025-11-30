@@ -12,17 +12,32 @@ export default function SpotifyAudioPlayer({ audioUrl }) {
     const audioRef = useRef(null)
     const audioContextRef = useRef(null)
 
-    // Generate waveform visualization
+    // Generate waveform visualization (non-blocking)
     useEffect(() => {
+        let isCancelled = false
+
         const generateWaveform = async () => {
+            // Start with fallback waveform immediately so player is usable
+            const fallback = Array.from({ length: 70 }, (_, i) =>
+                0.3 + 0.4 * Math.sin(i * 0.2) + Math.random() * 0.2
+            )
+            setWaveformData(fallback)
+            setIsLoading(false)
+
             try {
+                // Fetch audio for real waveform (in background)
                 const response = await fetch(`${API_BASE_URL}${audioUrl}`)
+                if (!response.ok || isCancelled) return
+
                 const arrayBuffer = await response.arrayBuffer()
+                if (isCancelled) return
 
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)()
                 audioContextRef.current = audioContext
 
                 const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+                if (isCancelled) return
+
                 const rawData = audioBuffer.getChannelData(0)
                 const samples = 70 // Number of bars
                 const blockSize = Math.floor(rawData.length / samples)
@@ -38,17 +53,16 @@ export default function SpotifyAudioPlayer({ audioUrl }) {
                 }
 
                 // Normalize the data
-                const multiplier = Math.pow(Math.max(...filteredData), -1)
-                const normalized = filteredData.map(n => n * multiplier)
-
-                setWaveformData(normalized)
-                setIsLoading(false)
+                const maxVal = Math.max(...filteredData)
+                if (maxVal > 0) {
+                    const normalized = filteredData.map(n => n / maxVal)
+                    if (!isCancelled) {
+                        setWaveformData(normalized)
+                    }
+                }
             } catch (error) {
-                // Error logged server-side only
-                // Create fallback random-ish waveform
-                const fallback = Array.from({ length: 70 }, () => Math.random() * 0.7 + 0.3)
-                setWaveformData(fallback)
-                setIsLoading(false)
+                console.warn('Waveform generation failed, using fallback:', error.message)
+                // Fallback already set, so just log
             }
         }
 
@@ -57,6 +71,7 @@ export default function SpotifyAudioPlayer({ audioUrl }) {
         }
 
         return () => {
+            isCancelled = true
             if (audioContextRef.current) {
                 audioContextRef.current.close()
             }
@@ -68,19 +83,41 @@ export default function SpotifyAudioPlayer({ audioUrl }) {
         if (!audio) return
 
         const updateTime = () => setCurrentTime(audio.currentTime)
-        const updateDuration = () => setDuration(audio.duration)
+        const updateDuration = () => {
+            // Only update if we get a valid duration
+            if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+                setDuration(audio.duration)
+            }
+        }
         const handleEnded = () => setIsPlaying(false)
+        const handleCanPlayThrough = () => {
+            // Also try to get duration when audio can play through
+            updateDuration()
+        }
+        const handleError = (e) => {
+            console.error('Audio error:', e)
+            setIsLoading(false)
+        }
 
         audio.addEventListener('timeupdate', updateTime)
         audio.addEventListener('loadedmetadata', updateDuration)
+        audio.addEventListener('durationchange', updateDuration)
+        audio.addEventListener('canplaythrough', handleCanPlayThrough)
         audio.addEventListener('ended', handleEnded)
+        audio.addEventListener('error', handleError)
+
+        // Force load the audio to get metadata
+        audio.load()
 
         return () => {
             audio.removeEventListener('timeupdate', updateTime)
             audio.removeEventListener('loadedmetadata', updateDuration)
+            audio.removeEventListener('durationchange', updateDuration)
+            audio.removeEventListener('canplaythrough', handleCanPlayThrough)
             audio.removeEventListener('ended', handleEnded)
+            audio.removeEventListener('error', handleError)
         }
-    }, [])
+    }, [audioUrl])
 
     const togglePlay = () => {
         const audio = audioRef.current
@@ -113,92 +150,157 @@ export default function SpotifyAudioPlayer({ audioUrl }) {
 
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 
+    // Playback speed options
+    const [playbackSpeed, setPlaybackSpeed] = useState(1)
+    const speedOptions = [0.75, 1, 1.25, 1.5, 2]
+
+    const cycleSpeed = () => {
+        const currentIndex = speedOptions.indexOf(playbackSpeed)
+        const nextIndex = (currentIndex + 1) % speedOptions.length
+        const newSpeed = speedOptions[nextIndex]
+        setPlaybackSpeed(newSpeed)
+        if (audioRef.current) {
+            audioRef.current.playbackRate = newSpeed
+        }
+    }
+
+    // Skip forward/backward
+    const skip = (seconds) => {
+        if (audioRef.current) {
+            audioRef.current.currentTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + seconds))
+        }
+    }
+
     return (
-        <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-[#1e293b] to-[#0f172a] rounded-2xl border border-gray-800 shadow-lg">
-            <audio ref={audioRef} src={`${API_BASE_URL}${audioUrl}`} preload="metadata" />
+        <div className="p-2 sm:p-3 bg-gradient-to-r from-[#1e293b] to-[#0f172a] rounded-lg sm:rounded-xl border border-gray-800/50 shadow-lg">
+            <audio
+                ref={audioRef}
+                src={`${API_BASE_URL}${audioUrl}`}
+                preload="auto"
+            />
 
-            {/* Play/Pause Button */}
-            <button
-                onClick={togglePlay}
-                disabled={isLoading}
-                className="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-gradient-to-br from-green-500 to-emerald-600 text-white rounded-full hover:scale-110 transition-transform shadow-lg shadow-green-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-                {isLoading ? (
-                    <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            {/* Main Controls Row */}
+            <div className="flex items-center gap-2 sm:gap-3">
+                {/* Skip Back */}
+                <button
+                    onClick={() => skip(-10)}
+                    className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+                    title="Back 10s"
+                >
+                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12.5 3C17.15 3 21.08 6.03 22.47 10.22L20.1 11C19.05 7.81 16.04 5.5 12.5 5.5C10.54 5.5 8.77 6.22 7.38 7.38L10 10H3V3L5.6 5.6C7.45 4 9.85 3 12.5 3M10 12V22H8V14H6V12H10M18 14V20C18 21.11 17.11 22 16 22H14C12.9 22 12 21.1 12 20V14C12 12.9 12.9 12 14 12H16C17.11 12 18 12.9 18 14M14 14V20H16V14H14Z" />
                     </svg>
-                ) : isPlaying ? (
-                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                    </svg>
-                ) : (
-                    <svg className="w-6 h-6 ml-1" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z" />
-                    </svg>
-                )}
-            </button>
+                </button>
 
-            {/* Waveform & Progress */}
-            <div className="flex-1">
-                {/* Time Display */}
-                <div className="flex justify-between mb-2 text-xs text-gray-400 font-medium">
-                    <span className="text-green-400">{formatTime(currentTime)}</span>
-                    <span>{formatTime(duration)}</span>
-                </div>
-
-                {/* Waveform Visualization */}
-                <div
-                    onClick={handleSeek}
-                    className="relative h-14 flex items-center gap-0.5 cursor-pointer group"
+                {/* Play/Pause Button */}
+                <button
+                    onClick={togglePlay}
+                    disabled={isLoading}
+                    className="flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center bg-gradient-to-br from-cyan-500 to-purple-600 text-white rounded-full hover:scale-105 transition-all shadow-lg shadow-cyan-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {isLoading ? (
-                        <div className="w-full h-full flex items-center justify-center">
-                            <div className="text-xs text-gray-500">Loading audio...</div>
-                        </div>
+                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                    ) : isPlaying ? (
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                        </svg>
                     ) : (
-                        waveformData.map((amplitude, index) => {
-                            const barProgress = (index / waveformData.length) * 100
-                            const isPassed = barProgress < progress
-                            const height = amplitude * 100
-
-                            return (
-                                <div
-                                    key={index}
-                                    className="flex-1 flex items-center justify-center transition-all duration-100"
-                                    style={{ minWidth: '2px', maxWidth: '8px' }}
-                                >
-                                    <div
-                                        className={`w-full rounded-full transition-all duration-200 group-hover:opacity-80 ${
-                                            isPassed
-                                                ? 'bg-gradient-to-t from-green-500 to-emerald-400'
-                                                : 'bg-gray-700'
-                                        }`}
-                                        style={{
-                                            height: `${Math.max(height, 10)}%`,
-                                            transform: isPlaying && isPassed ? 'scaleY(1.1)' : 'scaleY(1)'
-                                        }}
-                                    />
-                                </div>
-                            )
-                        })
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                        </svg>
                     )}
+                </button>
 
-                    {/* Hover indicator */}
-                    <div className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* Skip Forward */}
+                <button
+                    onClick={() => skip(10)}
+                    className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+                    title="Forward 10s"
+                >
+                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M11.5 3C6.85 3 2.92 6.03 1.53 10.22L3.9 11C4.95 7.81 7.96 5.5 11.5 5.5C13.46 5.5 15.23 6.22 16.62 7.38L14 10H21V3L18.4 5.6C16.55 4 14.15 3 11.5 3M10 12V22H8V14H6V12H10M18 14V20C18 21.11 17.11 22 16 22H14C12.9 22 12 21.1 12 20V14C12 12.9 12.9 12 14 12H16C17.11 12 18 12.9 18 14M14 14V20H16V14H14Z" />
+                    </svg>
+                </button>
+
+                {/* Waveform & Progress */}
+                <div className="flex-1 min-w-0">
+                    {/* Waveform */}
+                    <div
+                        onClick={handleSeek}
+                        className="relative h-6 sm:h-8 flex items-center gap-0.5 cursor-pointer group"
+                    >
+                        {isLoading ? (
+                            <div className="w-full h-full flex items-center justify-center">
+                                <div className="flex gap-1">
+                                    {[...Array(5)].map((_, i) => (
+                                        <div key={i} className="w-1 h-4 bg-gray-600 rounded-full animate-pulse" style={{ animationDelay: `${i * 0.1}s` }} />
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            waveformData.map((amplitude, index) => {
+                                const barProgress = (index / waveformData.length) * 100
+                                const isPassed = barProgress < progress
+                                const height = amplitude * 100
+
+                                return (
+                                    <div
+                                        key={index}
+                                        className="flex-1 flex items-center justify-center"
+                                        style={{ minWidth: '2px', maxWidth: '6px' }}
+                                    >
+                                        <div
+                                            className={`w-full rounded-full transition-all duration-150 ${
+                                                isPassed
+                                                    ? 'bg-gradient-to-t from-cyan-500 to-purple-500'
+                                                    : 'bg-gray-700/80'
+                                            }`}
+                                            style={{
+                                                height: `${Math.max(height, 15)}%`,
+                                                transform: isPlaying && isPassed ? 'scaleY(1.15)' : 'scaleY(1)'
+                                            }}
+                                        />
+                                    </div>
+                                )
+                            })
+                        )}
+                    </div>
+
+                    {/* Progress Bar - Shows played portion clearly */}
+                    <div
+                        onClick={handleSeek}
+                        className="relative h-1.5 mt-1 bg-gray-700/50 rounded-full cursor-pointer overflow-hidden group"
+                    >
+                        {/* Played portion */}
                         <div
-                            className="absolute top-0 bottom-0 w-0.5 bg-white/50 rounded-full"
-                            style={{ left: `${progress}%` }}
+                            className="absolute left-0 top-0 h-full bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full transition-all duration-100"
+                            style={{ width: `${progress}%` }}
+                        />
+                        {/* Playhead indicator */}
+                        <div
+                            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                            style={{ left: `calc(${progress}% - 6px)` }}
                         />
                     </div>
                 </div>
+
+                {/* Speed Control */}
+                <button
+                    onClick={cycleSpeed}
+                    className="flex-shrink-0 px-2 py-1 text-xs font-medium text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-700/50 rounded-md transition-colors"
+                    title="Playback speed"
+                >
+                    {playbackSpeed}x
+                </button>
             </div>
 
-            {/* Volume Icon (decorative) */}
-            <div className="flex-shrink-0 text-gray-500">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-                </svg>
+            {/* Time Display */}
+            <div className="flex justify-between mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-gray-500 font-medium px-1">
+                <span className="text-cyan-400">{formatTime(currentTime)}</span>
+                <span>{formatTime(duration)}</span>
             </div>
         </div>
     )

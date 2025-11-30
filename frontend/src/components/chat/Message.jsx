@@ -11,10 +11,23 @@ function Message({ message }) {
     const isUser = message.role === 'user'
     const [audioUrl, setAudioUrl] = useState(message.audioUrl || null)
     const [isGeneratingAudio, setIsGeneratingAudio] = useState(message.audioGenerating || false)
-    const [audioReady, setAudioReady] = useState(false)
+    const [audioReady, setAudioReady] = useState(message.audioReady || false)
     const [feedbackGiven, setFeedbackGiven] = useState(null) // 1, -1, or null
     const pollIntervalRef = useRef(null)
     const pollAttemptsRef = useRef(0)
+
+    // Update state when message props change (e.g., streaming complete)
+    useEffect(() => {
+        if (message.audioUrl && message.audioUrl !== audioUrl) {
+            setAudioUrl(message.audioUrl)
+        }
+        if (message.audioReady !== undefined && message.audioReady !== audioReady) {
+            setAudioReady(message.audioReady)
+        }
+        if (message.audioGenerating !== undefined && message.audioGenerating !== isGeneratingAudio) {
+            setIsGeneratingAudio(message.audioGenerating)
+        }
+    }, [message.audioUrl, message.audioReady, message.audioGenerating])
 
     // Poll for audio readiness when audio is generating
     useEffect(() => {
@@ -114,16 +127,16 @@ function Message({ message }) {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-6`}
+            className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4 sm:mb-6 px-2 sm:px-0`}
         >
-            <div className={`flex gap-3 max-w-3xl ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+            <div className={`flex gap-2 sm:gap-3 max-w-[95%] sm:max-w-[85%] md:max-w-3xl ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
                 {/* Avatar */}
                 <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ delay: 0.1, type: 'spring', stiffness: 200 }}
                     className={`
-          flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold shadow-lg
+          flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white text-xs sm:text-sm font-semibold shadow-lg
           ${isUser
                         ? 'bg-gradient-to-br from-cyan-500 to-purple-600 shadow-cyan-500/50'
                         : 'bg-gradient-to-br from-purple-500 to-pink-600 shadow-purple-500/50'
@@ -138,7 +151,7 @@ function Message({ message }) {
                     animate={{ scale: 1, opacity: 1 }}
                     transition={{ delay: 0.15, duration: 0.3 }}
                     className={`
-          flex-1 rounded-2xl p-4 backdrop-blur-sm
+          flex-1 min-w-0 rounded-xl sm:rounded-2xl p-3 sm:p-4 backdrop-blur-sm
           ${isUser
                         ? 'bg-gradient-to-br from-cyan-600/90 to-purple-600/90 text-white shadow-lg shadow-cyan-500/20'
                         : 'bg-white/5 border border-white/10 text-gray-100 shadow-lg shadow-purple-500/10'
@@ -242,8 +255,8 @@ function Message({ message }) {
                         </div>
                     )}
 
-                    {/* TTS Button for AI Messages - Only show if no audio is being generated or ready */}
-                    {!isUser && !audioUrl && !audioReady && !isGeneratingAudio && (
+                    {/* TTS Button for AI Messages - Only show in classic mode (not streaming) */}
+                    {!isUser && !audioUrl && !audioReady && !isGeneratingAudio && !message.streaming && !message.streamingGenerated && (
                         <motion.div
                             initial={{ opacity: 0, y: 5 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -411,32 +424,32 @@ function Message({ message }) {
                             initial={{ opacity: 0, y: 5 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.4, duration: 0.3 }}
-                            className="mt-3 flex items-center gap-2"
+                            className="mt-3 flex flex-wrap items-center gap-2"
                         >
-                            <span className="text-xs text-gray-500 mr-2">Was this helpful?</span>
+                            <span className="text-xs text-gray-500 mr-1 sm:mr-2 w-full sm:w-auto mb-1 sm:mb-0">Was this helpful?</span>
                             <motion.button
                                 whileHover={{ scale: 1.1 }}
                                 whileTap={{ scale: 0.9 }}
                                 onClick={() => handleFeedback(1)}
-                                className={`px-3 py-1.5 text-sm rounded-lg transition-all ${
+                                className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-lg transition-all ${
                                     feedbackGiven === 1
                                         ? 'bg-green-500/30 text-green-400 border border-green-500/50'
                                         : 'bg-white/5 text-gray-400 hover:bg-green-500/10 hover:text-green-400 border border-white/10'
                                 }`}
                             >
-                                👍 Helpful
+                                👍 <span className="hidden sm:inline">Helpful</span>
                             </motion.button>
                             <motion.button
                                 whileHover={{ scale: 1.1 }}
                                 whileTap={{ scale: 0.9 }}
                                 onClick={() => handleFeedback(-1)}
-                                className={`px-3 py-1.5 text-sm rounded-lg transition-all ${
+                                className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-lg transition-all ${
                                     feedbackGiven === -1
                                         ? 'bg-red-500/30 text-red-400 border border-red-500/50'
                                         : 'bg-white/5 text-gray-400 hover:bg-red-500/10 hover:text-red-400 border border-white/10'
                                 }`}
                             >
-                                👎 Not Helpful
+                                👎 <span className="hidden sm:inline">Not Helpful</span>
                             </motion.button>
                         </motion.div>
                     )}
@@ -480,5 +493,9 @@ export default memo(Message, (prevProps, nextProps) => {
     // Only re-render if message content hasn't changed
     return prevProps.message.id === nextProps.message.id &&
            prevProps.message.timestamp === nextProps.message.timestamp &&
-           prevProps.message.text === nextProps.message.text
+           prevProps.message.text === nextProps.message.text &&
+           prevProps.message.audioUrl === nextProps.message.audioUrl &&
+           prevProps.message.audioReady === nextProps.message.audioReady &&
+           prevProps.message.streaming === nextProps.message.streaming &&
+           prevProps.message.streamingGenerated === nextProps.message.streamingGenerated
 })

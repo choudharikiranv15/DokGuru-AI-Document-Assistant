@@ -103,7 +103,7 @@ export default function Profile() {
 
             {/* Header */}
             <div className="relative z-10 border-b border-white/10 bg-[#1e293b]/50 backdrop-blur-sm">
-                <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
                     <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
@@ -130,7 +130,7 @@ export default function Profile() {
             </div>
 
             {/* Main Content */}
-            <div className="relative z-10 max-w-5xl mx-auto px-6 py-12">
+            <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 md:py-12">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -142,15 +142,15 @@ export default function Profile() {
                             initial={{ scale: 0.8, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             transition={{ delay: 0.2, duration: 0.5 }}
-                            className="flex items-center gap-6"
+                            className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 text-center sm:text-left"
                         >
-                            <div className="w-24 h-24 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-3xl flex items-center justify-center text-white text-4xl font-bold shadow-xl shadow-cyan-500/50">
+                            <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-2xl sm:rounded-3xl flex items-center justify-center text-white text-3xl sm:text-4xl font-bold shadow-xl shadow-cyan-500/50">
                                 {capitalizedName.charAt(0)}
                             </div>
                             <div>
-                                <h1 className="text-4xl font-bold text-white mb-2">{capitalizedName}</h1>
-                                <p className="text-gray-400 text-lg">{user?.email}</p>
-                                <p className="text-gray-500 text-sm mt-1">Member since {userStats.memberSince}</p>
+                                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-1 sm:mb-2">{capitalizedName}</h1>
+                                <p className="text-gray-400 text-sm sm:text-base md:text-lg break-all">{user?.email}</p>
+                                <p className="text-gray-500 text-xs sm:text-sm mt-1">Member since {userStats.memberSince}</p>
                             </div>
                         </motion.div>
                     </div>
@@ -160,49 +160,49 @@ export default function Profile() {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.4, duration: 0.6 }}
-                        className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"
+                        className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8"
                     >
                         {/* Documents */}
-                        <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all">
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-xl flex items-center justify-center">
-                                    <svg className="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:bg-white/10 transition-all">
+                            <div className="flex items-center gap-3 sm:gap-4">
+                                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                                    <svg className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                     </svg>
                                 </div>
                                 <div>
-                                    <p className="text-3xl font-bold text-white">{userStats.documentsUploaded}</p>
-                                    <p className="text-gray-400 text-sm">Documents</p>
+                                    <p className="text-2xl sm:text-3xl font-bold text-white">{userStats.documentsUploaded}</p>
+                                    <p className="text-gray-400 text-xs sm:text-sm">Documents</p>
                                 </div>
                             </div>
                         </div>
 
                         {/* Queries */}
-                        <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all">
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-xl flex items-center justify-center">
-                                    <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:bg-white/10 transition-all">
+                            <div className="flex items-center gap-3 sm:gap-4">
+                                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                                    <svg className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                                     </svg>
                                 </div>
                                 <div>
-                                    <p className="text-3xl font-bold text-white">{userStats.queriesAsked}</p>
-                                    <p className="text-gray-400 text-sm">Questions Asked</p>
+                                    <p className="text-2xl sm:text-3xl font-bold text-white">{userStats.queriesAsked}</p>
+                                    <p className="text-gray-400 text-xs sm:text-sm">Questions Asked</p>
                                 </div>
                             </div>
                         </div>
 
                         {/* Plan */}
-                        <div className="bg-gradient-to-br from-cyan-600/20 to-purple-600/20 backdrop-blur-sm border border-cyan-500/30 rounded-2xl p-6">
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-xl flex items-center justify-center">
-                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="bg-gradient-to-br from-cyan-600/20 to-purple-600/20 backdrop-blur-sm border border-cyan-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-6 sm:col-span-2 md:col-span-1">
+                            <div className="flex items-center gap-3 sm:gap-4">
+                                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                                    <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                                     </svg>
                                 </div>
                                 <div>
-                                    <p className="text-2xl font-bold text-white">Beta</p>
-                                    <p className="text-cyan-300 text-sm">Free Access</p>
+                                    <p className="text-xl sm:text-2xl font-bold text-white">Beta</p>
+                                    <p className="text-cyan-300 text-xs sm:text-sm">Free Access</p>
                                 </div>
                             </div>
                         </div>
@@ -213,10 +213,10 @@ export default function Profile() {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.6, duration: 0.6 }}
-                        className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 mb-6"
+                        className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6"
                     >
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-bold text-white">Student Information</h2>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
+                            <h2 className="text-xl sm:text-2xl font-bold text-white">Student Information</h2>
                             {!isEditingStudent ? (
                                 <motion.button
                                     whileHover={{ scale: 1.05 }}
@@ -339,9 +339,9 @@ export default function Profile() {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.7, duration: 0.6 }}
-                        className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 mb-6"
+                        className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6"
                     >
-                        <h2 className="text-2xl font-bold text-white mb-6">Account Settings</h2>
+                        <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6">Account Settings</h2>
                         <div className="space-y-4">
                             {/* Email */}
                             <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl">

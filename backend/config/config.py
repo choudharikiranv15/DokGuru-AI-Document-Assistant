@@ -6,13 +6,20 @@ load_dotenv()
 
 
 class Config:
-    # API Keys - Primary
+    # API Keys - Primary (Pro Tier)
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")  # Google Gemini
 
-    # API Keys - LLM Fallbacks
+    # API Keys - Pro Tier LLMs
+    CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")  # Ultra-fast, 1M tokens/day free
+    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")  # No rate limits, very cheap
+    MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")    # High quality European
+
+    # API Keys - Free Tier LLMs (Fallbacks)
     SAMBANOVA_API_KEY = os.getenv("SAMBANOVA_API_KEY")
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+    COHERE_API_KEY = os.getenv("COHERE_API_KEY")       # Trial tier available
     HUGGINGFACE_API_TOKEN = os.getenv("HUGGINGFACE_API_TOKEN")
 
     # Model Configuration
