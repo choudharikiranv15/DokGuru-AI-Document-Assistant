@@ -3,13 +3,25 @@ LLM Fallback Handler with Multi-Provider Support
 Supports: Groq, Cerebras, Google Gemini, SambaNova, DeepSeek, Mistral, OpenRouter, Cohere
 Includes: Text and Vision models
 Structured by Plan Tier: Free vs Pro
+
+Performance Features:
+- Connection timeout (30s) to prevent hanging requests
+- Retry with exponential backoff for rate limits (429)
+- Automatic provider cascade on failures
 """
 import os
 import logging
+import time
 from typing import Dict, Any, Optional, List
 from openai import OpenAI
+import httpx
 
 logger = logging.getLogger(__name__)
+
+# Timeout configuration
+REQUEST_TIMEOUT = 30  # 30 seconds max per provider
+MAX_RETRIES = 2  # Max retries for rate-limited requests
+RETRY_BASE_DELAY = 1  # Base delay for exponential backoff (seconds)
 
 
 # Provider tier configuration
@@ -77,15 +89,21 @@ class LLMFallbackHandler:
             tier = 'PRO' if p['name'] in PROVIDER_TIERS['pro'] else 'FREE'
             logger.info(f"  {i+1}. [{tier}] {p['name']} ({p['text_model']})")
 
+    def _create_client(self, api_key: str, base_url: str) -> OpenAI:
+        """Create OpenAI client with timeout configuration"""
+        return OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=10.0),  # 30s total, 10s connect
+            max_retries=0  # We handle retries ourselves for better control
+        )
+
     def _init_groq(self):
         """Initialize Groq - Fast inference, good for Pro tier"""
         try:
             api_key = getattr(self.config, 'GROQ_API_KEY', None)
             if api_key:
-                client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://api.groq.com/openai/v1"
-                )
+                client = self._create_client(api_key, "https://api.groq.com/openai/v1")
                 self.providers.append({
                     'name': 'Groq',
                     'client': client,
@@ -106,10 +124,7 @@ class LLMFallbackHandler:
         try:
             api_key = getattr(self.config, 'CEREBRAS_API_KEY', None)
             if api_key:
-                client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://api.cerebras.ai/v1"
-                )
+                client = self._create_client(api_key, "https://api.cerebras.ai/v1")
                 self.providers.append({
                     'name': 'Cerebras',
                     'client': client,
@@ -130,10 +145,7 @@ class LLMFallbackHandler:
         try:
             api_key = getattr(self.config, 'GOOGLE_API_KEY', None)
             if api_key:
-                client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
-                )
+                client = self._create_client(api_key, "https://generativelanguage.googleapis.com/v1beta/openai/")
                 self.providers.append({
                     'name': 'Google Gemini',
                     'client': client,
@@ -154,10 +166,7 @@ class LLMFallbackHandler:
         try:
             api_key = getattr(self.config, 'SAMBANOVA_API_KEY', None)
             if api_key:
-                client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://api.sambanova.ai/v1"
-                )
+                client = self._create_client(api_key, "https://api.sambanova.ai/v1")
                 self.providers.append({
                     'name': 'SambaNova',
                     'client': client,
@@ -206,10 +215,7 @@ class LLMFallbackHandler:
         try:
             api_key = getattr(self.config, 'MISTRAL_API_KEY', None)
             if api_key:
-                client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://api.mistral.ai/v1"
-                )
+                client = self._create_client(api_key, "https://api.mistral.ai/v1")
                 self.providers.append({
                     'name': 'Mistral',
                     'client': client,
@@ -293,10 +299,7 @@ class LLMFallbackHandler:
                     },
                 ]
 
-                client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://openrouter.ai/api/v1"
-                )
+                client = self._create_client(api_key, "https://openrouter.ai/api/v1")
 
                 for model_config in free_models:
                     self.providers.append({
@@ -321,10 +324,7 @@ class LLMFallbackHandler:
             api_key = getattr(self.config, 'COHERE_API_KEY', None)
             if api_key:
                 # Cohere uses its own SDK format, but has OpenAI-compatible endpoint
-                client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://api.cohere.ai/compatibility/v1"
-                )
+                client = self._create_client(api_key, "https://api.cohere.ai/compatibility/v1")
                 self.providers.append({
                     'name': 'Cohere',
                     'client': client,
@@ -346,10 +346,7 @@ class LLMFallbackHandler:
         try:
             api_key = getattr(self.config, 'HUGGINGFACE_API_TOKEN', None)
             if api_key:
-                client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://router.huggingface.co/v1"
-                )
+                client = self._create_client(api_key, "https://router.huggingface.co/v1")
                 self.providers.append({
                     'name': 'Hugging Face',
                     'client': client,
@@ -447,72 +444,84 @@ class LLMFallbackHandler:
 
         logger.info(f"Query for {plan_type} user, ~{input_tokens} input tokens, {len(available_providers)} providers available")
 
-        # Try each provider in order
+        # Try each provider in order with retry logic
+        last_error = None
         for i, provider in enumerate(available_providers):
-            try:
-                logger.info(f"Trying {provider['name']}...")
-
-                # Check if input exceeds provider's context limit
-                if input_tokens > provider.get('max_context', 8000):
-                    logger.warning(f"{provider['name']} context limit ({provider.get('max_context')}) exceeded, skipping...")
-                    continue
-
-                messages = self._build_messages(question, conversation_history, system_prompt)
-
-                # Choose model based on query complexity
-                use_large = self._is_complex_query(question) and plan_type != 'free'
-                model = provider.get('text_model_large', provider['text_model']) if use_large else provider['text_model']
-
-                response = provider['client'].chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=provider['temperature']
-                )
-
-                answer = response.choices[0].message.content
-                tokens_used = response.usage.total_tokens if hasattr(response, 'usage') and response.usage else 0
-
-                logger.info(f"[SUCCESS] {provider['name']} responded ({len(answer)} chars, {tokens_used} tokens)")
-
-                return {
-                    'success': True,
-                    'answer': answer,
-                    'provider': provider['name'],
-                    'model': model,
-                    'tokens_used': tokens_used,
-                    'tier': provider.get('tier', 'unknown')
-                }
-
-            except Exception as e:
-                error_msg = str(e)
-                logger.warning(f"{provider['name']} failed: {error_msg}")
-
-                # Check for specific errors
-                is_rate_limit = any(x in error_msg.lower() for x in ['rate', 'quota', '429', 'limit', 'exceeded'])
-                is_context_error = any(x in error_msg.lower() for x in ['context', 'token', '413', 'too large', 'maximum'])
-
-                if is_rate_limit:
-                    logger.warning(f"{provider['name']} rate limited, trying next...")
-                elif is_context_error:
-                    logger.warning(f"{provider['name']} context exceeded, trying next...")
-
-                if i == len(available_providers) - 1:
-                    logger.error("All providers failed!")
-                    return {
-                        'success': False,
-                        'answer': "I apologize, but I'm experiencing technical difficulties. Please try again in a moment.",
-                        'provider': 'None',
-                        'model': 'None',
-                        'error': error_msg
-                    }
+            # Check if input exceeds provider's context limit
+            if input_tokens > provider.get('max_context', 8000):
+                logger.warning(f"{provider['name']} context limit ({provider.get('max_context')}) exceeded, skipping...")
                 continue
 
+            messages = self._build_messages(question, conversation_history, system_prompt)
+
+            # Choose model based on query complexity
+            use_large = self._is_complex_query(question) and plan_type != 'free'
+            model = provider.get('text_model_large', provider['text_model']) if use_large else provider['text_model']
+
+            # Retry loop with exponential backoff for rate limits
+            for retry in range(MAX_RETRIES + 1):
+                try:
+                    if retry > 0:
+                        delay = RETRY_BASE_DELAY * (2 ** (retry - 1))  # 1s, 2s, 4s...
+                        logger.info(f"Retry {retry}/{MAX_RETRIES} for {provider['name']} after {delay}s...")
+                        time.sleep(delay)
+
+                    logger.info(f"Trying {provider['name']} ({model})...")
+
+                    response = provider['client'].chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        max_tokens=max_tokens,
+                        temperature=provider['temperature']
+                    )
+
+                    answer = response.choices[0].message.content
+                    tokens_used = response.usage.total_tokens if hasattr(response, 'usage') and response.usage else 0
+
+                    logger.info(f"[SUCCESS] {provider['name']} responded ({len(answer)} chars, {tokens_used} tokens)")
+
+                    return {
+                        'success': True,
+                        'answer': answer,
+                        'provider': provider['name'],
+                        'model': model,
+                        'tokens_used': tokens_used,
+                        'tier': provider.get('tier', 'unknown')
+                    }
+
+                except Exception as e:
+                    error_msg = str(e)
+                    last_error = error_msg
+
+                    # Check for specific errors
+                    is_rate_limit = any(x in error_msg.lower() for x in ['rate', 'quota', '429', 'limit', 'exceeded'])
+                    is_timeout = any(x in error_msg.lower() for x in ['timeout', 'timed out', 'connection'])
+                    is_context_error = any(x in error_msg.lower() for x in ['context', 'token', '413', 'too large', 'maximum'])
+
+                    # Only retry for rate limits and timeouts
+                    if (is_rate_limit or is_timeout) and retry < MAX_RETRIES:
+                        logger.warning(f"{provider['name']} {'rate limited' if is_rate_limit else 'timed out'}, will retry...")
+                        continue
+                    elif is_context_error:
+                        logger.warning(f"{provider['name']} context exceeded, trying next provider...")
+                        break  # Skip retries, try next provider
+                    else:
+                        logger.warning(f"{provider['name']} failed: {error_msg[:100]}")
+                        break  # Skip retries, try next provider
+
+            # If we exit the retry loop without success, try next provider
+            if i < len(available_providers) - 1:
+                logger.info(f"Moving to next provider...")
+                continue
+
+        # All providers failed
+        logger.error("All providers failed!")
         return {
             'success': False,
-            'answer': "Service temporarily unavailable. Please try again later.",
+            'answer': "I apologize, but I'm experiencing technical difficulties. Please try again in a moment.",
             'provider': 'None',
-            'model': 'None'
+            'model': 'None',
+            'error': last_error or 'All providers failed'
         }
 
     def query_vision(self, question: str, image_data: Any,

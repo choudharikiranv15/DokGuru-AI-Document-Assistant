@@ -532,6 +532,13 @@ def init_critical_components():
 # Initialize critical components immediately
 init_critical_components()
 
+# ============= TTS THREAD POOL INITIALIZATION =============
+# Initialize TTS thread pool at startup to avoid cold start penalty
+from concurrent.futures import ThreadPoolExecutor
+app.tts_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix='tts-worker')
+app.tts_futures = []  # Track futures for cleanup
+logger.info("✓ TTS thread pool initialized (3 workers)")
+
 # Warmup flag to trigger background initialization of heavy components
 _warmup_started = False
 _warmup_lock = threading.Lock()
@@ -1448,9 +1455,8 @@ def ask_question():
         audio_filename = f"auto_{audio_id}.mp3"  # TTS handlers output MP3 format
         audio_url = f"/audio/{audio_filename}"
 
-        # Use thread pool for better resource management
-        if not hasattr(app, 'tts_executor'):
-            app.tts_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix='tts-worker')
+        # Use pre-initialized TTS thread pool for better resource management
+        # Thread pool is initialized at app startup (see TTS THREAD POOL INITIALIZATION)
 
         # Start audio generation in background thread (non-blocking)
         def generate_audio_background():
@@ -1481,13 +1487,10 @@ def ask_question():
                 logger.error(f"❌ Background: TTS generation failed: {tts_error}")
                 capture_exception(tts_error, {'context': 'background_tts', 'audio_id': audio_id})
 
-        # Submit to thread pool with timeout instead of creating new threads
+        # Submit to pre-initialized thread pool
         future = app.tts_executor.submit(generate_audio_background)
-        # Store future for potential cancellation (optional cleanup)
-        if not hasattr(app, 'tts_futures'):
-            app.tts_futures = []
+        # Store future for potential cancellation (cleanup completed futures)
         app.tts_futures.append(future)
-        # Clean up completed futures
         app.tts_futures = [f for f in app.tts_futures if not f.done()]
 
         result_payload = {
