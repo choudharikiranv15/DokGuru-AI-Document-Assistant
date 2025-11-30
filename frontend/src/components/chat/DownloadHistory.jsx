@@ -18,12 +18,12 @@ export default function DownloadHistory() {
 
                 if (msg.role === 'user') {
                     questionCount++
-                    text += `Q${questionCount}: ${msg.content}\n\n`
+                    text += `Q${questionCount}: ${msg.text || msg.content || ''}\n\n`
 
                     // Check if next message is assistant's response
                     if (i + 1 < messages.length && messages[i + 1].role === 'assistant') {
                         const answer = messages[i + 1]
-                        text += `A${questionCount}: ${answer.content}\n`
+                        text += `A${questionCount}: ${answer.text || answer.content || ''}\n`
 
                         // Add sources if available
                         if (answer.sources && answer.sources.length > 0) {
@@ -66,12 +66,12 @@ export default function DownloadHistory() {
 
                 if (msg.role === 'user') {
                     questionCount++
-                    text += `Q${questionCount}: ${msg.content}\n\n`
+                    text += `Q${questionCount}: ${msg.text || msg.content || ''}\n\n`
 
                     // Check if next message is assistant's response
                     if (i + 1 < messages.length && messages[i + 1].role === 'assistant') {
                         const answer = messages[i + 1]
-                        text += `A${questionCount}: ${answer.content}\n\n`
+                        text += `A${questionCount}: ${answer.text || answer.content || ''}\n\n`
                         text += `${'-'.repeat(50)}\n\n`
                         i++ // Skip the assistant message since we already processed it
                     }
