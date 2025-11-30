@@ -211,11 +211,26 @@ class GoogleCloudTTSHandler:
     def _get_credentials(self):
         """
         Get credentials from various sources:
-        1. GOOGLE_CLOUD_CREDENTIALS env var (JSON string - for Cloud Run)
-        2. GOOGLE_TTS_CREDENTIALS env var (JSON string - alternative)
-        3. GOOGLE_APPLICATION_CREDENTIALS env var (file path)
-        4. Default credentials (GCP environment)
+        1. GOOGLE_CLOUD_CREDENTIALS_BASE64 env var (Base64 encoded JSON - for Cloud Run CI/CD)
+        2. GOOGLE_CLOUD_CREDENTIALS env var (JSON string - for Cloud Run)
+        3. GOOGLE_TTS_CREDENTIALS env var (JSON string - alternative)
+        4. GOOGLE_APPLICATION_CREDENTIALS env var (file path)
+        5. Default credentials (GCP environment)
         """
+        import base64
+
+        # Option 0: Base64 encoded JSON in GOOGLE_CLOUD_CREDENTIALS_BASE64
+        creds_base64 = os.environ.get('GOOGLE_CLOUD_CREDENTIALS_BASE64')
+        if creds_base64:
+            try:
+                creds_json = base64.b64decode(creds_base64).decode('utf-8')
+                creds_info = json.loads(creds_json)
+                credentials = service_account.Credentials.from_service_account_info(creds_info)
+                logger.info("Using credentials from GOOGLE_CLOUD_CREDENTIALS_BASE64 env var")
+                return credentials
+            except Exception as e:
+                logger.warning(f"Failed to decode base64 credentials: {e}")
+
         # Option 1: JSON content in GOOGLE_CLOUD_CREDENTIALS
         creds_json = os.environ.get('GOOGLE_CLOUD_CREDENTIALS') or os.environ.get('GOOGLE_TTS_CREDENTIALS')
         if creds_json:

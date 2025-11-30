@@ -137,9 +137,25 @@ jobs:
             --update-env-vars "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" \
             --update-env-vars "POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }}" \
             --update-env-vars "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" \
-            --update-env-vars "GOOGLE_CLOUD_CREDENTIALS=${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" \
             --update-env-vars "FRONTEND_URL=https://dokguru.vercel.app" \
             --update-env-vars "CORS_ORIGINS=https://dokguru.vercel.app"
+
+      - name: Set Google Cloud TTS credentials
+        run: |
+          # Write credentials to temp file (JSON with special chars can't be passed via --update-env-vars)
+          echo '${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}' > /tmp/gcloud-creds.json
+
+          # Base64 encode to avoid shell escaping issues
+          ENCODED_CREDS=$(base64 -w 0 /tmp/gcloud-creds.json)
+
+          # Update service with encoded credentials
+          gcloud run services update ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} \
+            --project ${{ env.PROJECT_ID }} \
+            --update-env-vars "GOOGLE_CLOUD_CREDENTIALS_BASE64=${ENCODED_CREDS}"
+
+          # Cleanup
+          rm -f /tmp/gcloud-creds.json
 
       - name: Get service URL
         run: |
