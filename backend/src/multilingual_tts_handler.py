@@ -52,18 +52,20 @@ class MultilingualTTSHandler:
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
 
-        # Initialize Piper TTS (Fast English, Offline)
+        # Initialize Piper TTS (Fast offline for English + Hindi)
         self.piper_handler = None
         self.piper_available = False
+        self.piper_languages = []
 
         try:
-            from src.tts_handler import TTSHandler
-            self.piper_handler = TTSHandler(output_dir=output_dir)
-            if self.piper_handler.piper_available:
+            from src.tts_handler import PiperTTSHandler
+            self.piper_handler = PiperTTSHandler(output_dir=output_dir)
+            if self.piper_handler.piper_available and self.piper_handler.available_voices:
                 self.piper_available = True
-                logger.info("✓ Piper TTS available (Fast offline English, 0.3s)")
+                self.piper_languages = list(self.piper_handler.available_voices.keys())
+                logger.info(f"Piper TTS available for: {self.piper_languages} (fast, offline)")
             else:
-                logger.info("ℹ Piper TTS not available. Using EdgeTTS/gTTS.")
+                logger.info("Piper TTS not available. Using cloud TTS.")
         except Exception as e:
             logger.warning(f"Piper TTS not available: {e}")
             self.piper_available = False
@@ -210,13 +212,16 @@ class MultilingualTTSHandler:
                 # Priority: Piper (offline) → Google Cloud (reliable) → EdgeTTS (may fail in cloud) → Azure → gTTS
                 # Google Cloud TTS is prioritized over EdgeTTS because it doesn't have 403 issues in cloud environments
 
-                if language == 'en':
-                    # English: Piper > GCloud > EdgeTTS > Azure > gTTS
-                    if self.piper_available:
-                        logger.info("Using Piper TTS for English (0.3s, offline, best)")
-                        return self._synthesize_with_piper(cleaned_text, output_filename)
-                    elif self.gcloud_available:
-                        logger.info("Using Google Cloud TTS for English (Neural2, excellent)")
+                # Check if Piper supports this language (English + Hindi)
+                if self.piper_available and language in self.piper_languages:
+                    # Piper available for this language: Use it first (fastest, offline)
+                    logger.info(f"Using Piper TTS for {self.SUPPORTED_LANGUAGES.get(language, language)} (fast, offline)")
+                    return self._synthesize_with_piper(cleaned_text, language, output_filename)
+
+                elif language == 'en':
+                    # English without Piper: GCloud > EdgeTTS > Azure > gTTS
+                    if self.gcloud_available:
+                        logger.info("Using Google Cloud TTS for English (Standard, FREE tier)")
                         return self._synthesize_with_gcloud(cleaned_text, language, output_filename)
                     elif self.edge_available:
                         logger.info("Using EdgeTTS for English (0.5s, online)")
@@ -232,7 +237,7 @@ class MultilingualTTSHandler:
                     # Indian languages: GCloud > EdgeTTS > Azure > gTTS
                     # Google Cloud TTS is more reliable in cloud environments (no 403 errors)
                     if self.gcloud_available:
-                        logger.info(f"Using Google Cloud TTS for {self.SUPPORTED_LANGUAGES.get(language, language)} (Neural2, reliable)")
+                        logger.info(f"Using Google Cloud TTS for {self.SUPPORTED_LANGUAGES.get(language, language)} (Standard, FREE tier)")
                         return self._synthesize_with_gcloud(cleaned_text, language, output_filename)
                     elif self.edge_available:
                         logger.info(f"Using EdgeTTS for {self.SUPPORTED_LANGUAGES.get(language, language)} (0.5s, excellent quality)")
@@ -420,28 +425,32 @@ class MultilingualTTSHandler:
             logger.error(f"Azure TTS failed: {e}. Falling back to gTTS")
             return self._synthesize_with_gtts(text, language, output_filename)
 
-    def _synthesize_with_piper(self, text: str, output_filename: Optional[str] = None) -> Dict[str, Any]:
-        """Synthesize speech using Piper TTS (Fast offline English TTS)"""
+    def _synthesize_with_piper(self, text: str, language: str = 'en', output_filename: Optional[str] = None) -> Dict[str, Any]:
+        """Synthesize speech using Piper TTS (Fast offline TTS for English + Hindi)"""
         try:
             if not self.piper_handler or not self.piper_available:
                 raise Exception("Piper TTS not available")
 
-            logger.info(f"Synthesizing with Piper TTS: {len(text)} characters")
+            if language not in self.piper_languages:
+                raise Exception(f"Piper doesn't support language: {language}")
 
-            result = self.piper_handler.synthesize(text, output_filename)
+            logger.info(f"Synthesizing with Piper TTS ({language}): {len(text)} characters")
+
+            result = self.piper_handler.synthesize(text, language, output_filename)
             result['engine'] = 'Piper TTS'
-            result['language'] = 'en'
-            result['language_name'] = 'English'
+            result['language_name'] = self.SUPPORTED_LANGUAGES.get(language, language)
 
             return result
 
         except Exception as e:
-            logger.error(f"Piper TTS failed: {e}. Falling back to EdgeTTS/gTTS")
-            # Fallback to EdgeTTS if available, otherwise gTTS
-            if self.edge_available:
-                return self._synthesize_with_edge(text, 'en', output_filename)
+            logger.error(f"Piper TTS failed: {e}. Falling back to GCloud/EdgeTTS/gTTS")
+            # Fallback chain: GCloud > EdgeTTS > gTTS
+            if self.gcloud_available:
+                return self._synthesize_with_gcloud(text, language, output_filename)
+            elif self.edge_available:
+                return self._synthesize_with_edge(text, language, output_filename)
             else:
-                return self._synthesize_with_gtts(text, 'en', output_filename)
+                return self._synthesize_with_gtts(text, language, output_filename)
 
     def _synthesize_with_gcloud(self, text: str, language: str, output_filename: Optional[str] = None) -> Dict[str, Any]:
         """Synthesize speech using Google Cloud TTS (Neural2 voices, reliable in cloud)"""

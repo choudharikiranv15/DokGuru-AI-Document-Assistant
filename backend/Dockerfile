@@ -102,19 +102,17 @@ RUN pip install --no-cache-dir \
 # - scikit-learn (not used in this app)
 
 # ============================================================================
-# INSTALL PIPER TTS (Lightweight offline TTS)
+# DOWNLOAD PIPER VOICE MODELS (English + Hindi for offline TTS)
 # ============================================================================
-RUN wget -O /tmp/piper.tar.gz https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_amd64.tar.gz && \
-    mkdir -p /tmp/piper && \
-    tar -xzf /tmp/piper.tar.gz -C /tmp/piper && \
-    find /tmp/piper -name "piper" -type f -exec mv {} /usr/local/bin/piper \; && \
-    chmod +x /usr/local/bin/piper && \
-    rm -rf /tmp/piper.tar.gz /tmp/piper
-
-# Download Piper voice model (only English for now - saves space)
+# Note: piper-tts Python library is installed via requirements-app.txt
+# The CLI binary is no longer needed since we use the Python library
 RUN mkdir -p /app/tts_models && \
+    # English voice (lessac - high quality)
     wget -O /app/tts_models/en_US-lessac-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/en_US-lessac-medium.onnx && \
-    wget -O /app/tts_models/en_US-lessac-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
+    wget -O /app/tts_models/en_US-lessac-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json && \
+    # Hindi voice (pratham - male voice)
+    wget -O /app/tts_models/hi_IN-pratham-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/hi/hi_IN/pratham/medium/hi_IN-pratham-medium.onnx && \
+    wget -O /app/tts_models/hi_IN-pratham-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/hi/hi_IN/pratham/medium/hi_IN-pratham-medium.onnx.json
 
 # ============================================================================
 # SET WORKING DIRECTORY
