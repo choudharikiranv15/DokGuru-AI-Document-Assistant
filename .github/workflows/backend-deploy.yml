@@ -37,7 +37,8 @@ jobs:
         run: |
           cd backend
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          # Use lightweight app requirements for CI (full deps installed via Dockerfile)
+          pip install -r requirements-app.txt
           pip install pytest pytest-cov flake8
 
       - name: Lint with flake8
