@@ -1565,18 +1565,60 @@ def ask_question_stream():
         @stream_with_context
         def generate():
             """
-            True LLM streaming - yields chunks as they arrive from the LLM
-            Reduces perceived latency from 3-5s to ~0.5s (time to first token)
+            True LLM streaming with PARALLEL TTS generation
+            - Text chunks stream immediately (~0.5s to first token)
+            - TTS runs in parallel threads (3 workers)
+            - Audio URLs sent as they complete (not blocking text)
             """
             try:
                 import hashlib
                 import re as regex
+                from concurrent.futures import as_completed
+                import queue
+                import threading
 
                 full_response = ""
                 sources_used = 0
                 current_sentence = ""
                 sentence_count = 0
                 audio_urls = []
+                tts_futures = {}  # {future: (sentence_id, sentence_text)}
+                pending_audio = queue.Queue()  # Thread-safe queue for completed audio
+
+                def tts_worker(sentence_id, sentence_text, lang):
+                    """Generate TTS in thread pool"""
+                    try:
+                        audio_id = f"stream_{user_id[:8]}_{sentence_id}_{hashlib.md5(sentence_text.encode()).hexdigest()[:8]}"
+                        result = tts_handler.synthesize(
+                            sentence_text,
+                            language=lang,
+                            output_filename=audio_id
+                        )
+                        if result.get('filename'):
+                            return {
+                                'sentence_id': sentence_id,
+                                'audio_url': f"/audio/{result.get('filename')}",
+                                'duration': result.get('duration', 0),
+                                'success': True
+                            }
+                    except Exception as e:
+                        logger.warning(f"TTS error for sentence {sentence_id}: {e}")
+                    return {'sentence_id': sentence_id, 'success': False}
+
+                def check_completed_tts():
+                    """Check for completed TTS futures and yield results"""
+                    completed = []
+                    for future in list(tts_futures.keys()):
+                        if future.done():
+                            try:
+                                result = future.result(timeout=0)
+                                if result.get('success'):
+                                    completed.append(result)
+                                    audio_urls.append(result['audio_url'])
+                            except Exception as e:
+                                logger.warning(f"TTS future error: {e}")
+                            del tts_futures[future]
+                    return completed
 
                 # Use true streaming from RAG system
                 for chunk in rag_system.query_stream(
@@ -1587,39 +1629,33 @@ def ask_question_stream():
                 ):
                     chunk_type = chunk.get('type')
 
+                    # Check for completed TTS and yield audio events
+                    for audio_result in check_completed_tts():
+                        yield f"data: {json.dumps({'type': 'audio', 'sentence_id': audio_result['sentence_id'], 'audio_url': audio_result['audio_url'], 'duration': audio_result['duration']})}\n\n"
+
                     if chunk_type == 'context':
-                        # Send context info (sources found)
                         sources_used = chunk.get('sources_used', 0)
                         yield f"data: {json.dumps({'type': 'context', 'sources_used': sources_used})}\n\n"
 
                     elif chunk_type == 'chunk':
-                        # Stream text chunk immediately for real-time display
                         content = chunk.get('content', '')
                         full_response += content
                         current_sentence += content
 
-                        # Send raw chunk for immediate display
+                        # Stream text chunk immediately (non-blocking)
                         yield f"data: {json.dumps({'type': 'text', 'content': content, 'streaming': True})}\n\n"
 
-                        # Check if we completed a sentence (for TTS)
+                        # Check if we completed a sentence (submit TTS to thread pool)
                         if regex.search(r'[.!?]\s*$', current_sentence):
                             sentence_count += 1
                             sentence_text = current_sentence.strip()
 
-                            # Generate TTS in background for completed sentence
-                            try:
-                                audio_id = f"stream_{user_id[:8]}_{sentence_count}_{hashlib.md5(sentence_text.encode()).hexdigest()[:8]}"
-                                tts_result = tts_handler.synthesize(
-                                    sentence_text,
-                                    language=language,
-                                    output_filename=audio_id
-                                )
-                                if tts_result.get('filename'):
-                                    audio_url = f"/audio/{tts_result.get('filename')}"
-                                    audio_urls.append(audio_url)
-                                    yield f"data: {json.dumps({'type': 'audio', 'sentence_id': sentence_count, 'audio_url': audio_url, 'duration': tts_result.get('duration', 0)})}\n\n"
-                            except Exception as tts_err:
-                                logger.warning(f"TTS error for sentence {sentence_count}: {tts_err}")
+                            # Submit TTS to thread pool (non-blocking!)
+                            future = app.tts_executor.submit(
+                                tts_worker, sentence_count, sentence_text, language
+                            )
+                            tts_futures[future] = (sentence_count, sentence_text)
+                            logger.debug(f"Submitted TTS for sentence {sentence_count} to thread pool")
 
                             current_sentence = ""
 
@@ -1627,19 +1663,21 @@ def ask_question_stream():
                         # Handle any remaining text as final sentence
                         if current_sentence.strip():
                             sentence_count += 1
+                            future = app.tts_executor.submit(
+                                tts_worker, sentence_count, current_sentence.strip(), language
+                            )
+                            tts_futures[future] = (sentence_count, current_sentence.strip())
+
+                        # Wait for all pending TTS to complete (with timeout)
+                        logger.info(f"Waiting for {len(tts_futures)} pending TTS jobs...")
+                        for future in as_completed(tts_futures.keys(), timeout=30):
                             try:
-                                audio_id = f"stream_{user_id[:8]}_{sentence_count}_{hashlib.md5(current_sentence.encode()).hexdigest()[:8]}"
-                                tts_result = tts_handler.synthesize(
-                                    current_sentence.strip(),
-                                    language=language,
-                                    output_filename=audio_id
-                                )
-                                if tts_result.get('filename'):
-                                    audio_url = f"/audio/{tts_result.get('filename')}"
-                                    audio_urls.append(audio_url)
-                                    yield f"data: {json.dumps({'type': 'audio', 'sentence_id': sentence_count, 'audio_url': audio_url, 'duration': tts_result.get('duration', 0)})}\n\n"
-                            except Exception as tts_err:
-                                logger.warning(f"TTS error for final sentence: {tts_err}")
+                                result = future.result()
+                                if result.get('success'):
+                                    audio_urls.append(result['audio_url'])
+                                    yield f"data: {json.dumps({'type': 'audio', 'sentence_id': result['sentence_id'], 'audio_url': result['audio_url'], 'duration': result['duration']})}\n\n"
+                            except Exception as e:
+                                logger.warning(f"TTS completion error: {e}")
 
                         # Send completion with all audio URLs
                         yield f"data: {json.dumps({'type': 'done', 'full_response': full_response, 'sources_used': sources_used, 'total_sentences': sentence_count, 'audio_urls': audio_urls, 'provider': chunk.get('provider', 'unknown')})}\n\n"
@@ -1649,7 +1687,7 @@ def ask_question_stream():
                         conversation_history.append(full_response)
                         rag_system.cache.save_user_conversation(user_id, conversation_history)
 
-                        logger.info(f"True streaming complete: {sentence_count} sentences, {len(full_response)} chars")
+                        logger.info(f"Parallel streaming complete: {sentence_count} sentences, {len(audio_urls)} audio files")
 
                     elif chunk_type == 'error':
                         yield f"data: {json.dumps({'type': 'error', 'message': chunk.get('content', 'Unknown error')})}\n\n"
