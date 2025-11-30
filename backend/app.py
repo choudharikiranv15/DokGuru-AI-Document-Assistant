@@ -2578,6 +2578,98 @@ def admin_get_ai_feedback():
         return jsonify({'success': False, 'message': str(e)}), 500
 
 
+@app.route('/admin/promote', methods=['POST', 'OPTIONS'])
+@require_admin
+def admin_promote_user():
+    """Promote a user to admin (requires existing admin)"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+
+        if not email:
+            return jsonify({'success': False, 'message': 'Email required'}), 400
+
+        # Find user
+        user = db.get_user_by_email(email)
+        if not user:
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+
+        # Promote to admin
+        result = db.client.table('users').update({
+            'is_admin': True,
+            'admin_notes': f'Promoted by {request.user_email}'
+        }).eq('email', email).execute()
+
+        logger.info(f"Admin {request.user_email} promoted {email} to admin")
+
+        return jsonify({
+            'success': True,
+            'message': f'{email} promoted to admin',
+            'user_id': user.get('id')
+        })
+    except Exception as e:
+        logger.error(f"Admin promote error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/admin/setup', methods=['POST'])
+def admin_setup():
+    """
+    One-time admin setup endpoint
+    Requires ADMIN_SETUP_KEY environment variable
+    Creates the first admin user
+    """
+    try:
+        data = request.get_json()
+        setup_key = data.get('setup_key')
+        email = data.get('email')
+
+        # Verify setup key
+        expected_key = os.getenv('ADMIN_SETUP_KEY')
+        if not expected_key:
+            return jsonify({
+                'success': False,
+                'message': 'ADMIN_SETUP_KEY not configured. Set it in environment variables.'
+            }), 403
+
+        if setup_key != expected_key:
+            logger.warning(f"Invalid admin setup attempt for {email}")
+            return jsonify({'success': False, 'message': 'Invalid setup key'}), 403
+
+        if not email:
+            return jsonify({'success': False, 'message': 'Email required'}), 400
+
+        # Check if user exists
+        user = db.get_user_by_email(email)
+        if not user:
+            return jsonify({'success': False, 'message': 'User not found. Register first.'}), 404
+
+        # Check if already admin
+        if user.get('is_admin'):
+            return jsonify({
+                'success': True,
+                'message': f'{email} is already an admin',
+                'user_id': user.get('id')
+            })
+
+        # Promote to admin
+        result = db.client.table('users').update({
+            'is_admin': True,
+            'admin_notes': 'Initial admin - set via setup endpoint'
+        }).eq('email', email).execute()
+
+        logger.info(f"Admin setup: {email} set as admin")
+
+        return jsonify({
+            'success': True,
+            'message': f'{email} is now an admin',
+            'user_id': user.get('id')
+        })
+    except Exception as e:
+        logger.error(f"Admin setup error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 # ============= END ADMIN ENDPOINTS =============
 
 # ============= MODEL WARMUP (PRE-LOADING) =============
