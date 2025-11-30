@@ -157,17 +157,38 @@ class EdgeTTSHandler:
             logger.error(f"EdgeTTS error: {str(e)}")
             raise Exception(f"Failed to synthesize speech with EdgeTTS: {str(e)}")
 
-    async def _synthesize_async(self, text: str, voice: str, output_path: str):
+    async def _synthesize_async(self, text: str, voice: str, output_path: str, max_retries: int = 3):
         """
-        Async synthesis (EdgeTTS is async-only)
+        Async synthesis (EdgeTTS is async-only) with retry logic for 403 errors
 
         Args:
             text: Text to synthesize
             voice: Voice name (e.g., 'hi-IN-SwaraNeural')
             output_path: Path to save audio file
+            max_retries: Maximum number of retry attempts for transient errors
         """
-        communicate = self.edge_tts.Communicate(text, voice)
-        await communicate.save(output_path)
+        import asyncio as aio
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                communicate = self.edge_tts.Communicate(text, voice)
+                await communicate.save(output_path)
+                return  # Success
+            except Exception as e:
+                last_error = e
+                error_str = str(e).lower()
+                # Retry on 403 (rate limit), 429 (too many requests), or connection errors
+                if '403' in error_str or '429' in error_str or 'connection' in error_str:
+                    wait_time = (attempt + 1) * 2  # Exponential backoff: 2, 4, 6 seconds
+                    logger.warning(f"EdgeTTS attempt {attempt + 1}/{max_retries} failed with {e}. Retrying in {wait_time}s...")
+                    await aio.sleep(wait_time)
+                else:
+                    # Non-retryable error, raise immediately
+                    raise
+
+        # All retries exhausted
+        raise last_error or Exception("EdgeTTS synthesis failed after all retries")
 
     def _get_audio_duration(self, audio_path: str) -> float:
         """Get duration of MP3 audio file in seconds"""

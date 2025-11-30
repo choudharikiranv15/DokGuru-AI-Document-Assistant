@@ -3,12 +3,37 @@ import os
 import logging
 from typing import List, Dict, Any
 from .pdf_processor import PDFProcessor
-# Use ChromaDB for persistent vector storage with proper embeddings
-from .chroma_vector_store import ChromaVectorStore as VectorStore
 from .retriever import SmartRetriever
 from .llm_handler import LLMHandler
 from .redis_cache import RedisCacheManager
 from .gemini_vision_handler import GeminiVisionHandler
+
+
+def _init_vector_store(config, logger):
+    """
+    Initialize vector store with fallback:
+    1. Supabase pgvector (cloud persistent) - Production
+    2. ChromaDB (local persistent) - Development fallback
+    """
+    # Try Supabase pgvector first (production)
+    if config.SUPABASE_URL and config.SUPABASE_KEY:
+        try:
+            from .supabase_vector_store import SupabaseVectorStore
+            store = SupabaseVectorStore(config)
+            logger.info("✓ Using Supabase pgvector (cloud persistent)")
+            return store
+        except Exception as e:
+            logger.warning(f"Supabase vector store failed: {e}")
+
+    # Fallback to ChromaDB (local)
+    try:
+        from .chroma_vector_store import ChromaVectorStore
+        store = ChromaVectorStore(config)
+        logger.info("✓ Using ChromaDB (local persistent - WARNING: data may be lost on deployment)")
+        return store
+    except Exception as e:
+        logger.error(f"ChromaDB failed: {e}")
+        raise RuntimeError("No vector store available")
 
 
 class RAGSystem:
@@ -18,7 +43,7 @@ class RAGSystem:
 
         # Initialize components
         self.pdf_processor = PDFProcessor(config)
-        self.vector_store = VectorStore(config)
+        self.vector_store = _init_vector_store(config, self.logger)
         self.retriever = SmartRetriever(self.vector_store, config)
         self.llm_handler = LLMHandler(config)
         self.gemini_vision = GeminiVisionHandler(config)
@@ -371,10 +396,13 @@ Answer using the context above. Be concise and accurate."""
             self.logger.error(f"Error deleting document: {e}")
             return {'success': False, 'error': str(e)}
 
-    def clear_all_documents(self) -> Dict[str, Any]:
-        """Clear all documents from the vector store"""
+    def clear_all_documents(self, user_id: str = None) -> Dict[str, Any]:
+        """Clear all documents from the vector store, optionally filtered by user"""
         try:
-            result = self.vector_store.clear_all()
+            if user_id:
+                result = self.vector_store.clear_user_documents(user_id=user_id)
+            else:
+                result = self.vector_store.clear_all()
             return result
         except Exception as e:
             self.logger.error(f"Error clearing documents: {e}")

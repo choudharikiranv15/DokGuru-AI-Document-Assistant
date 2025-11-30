@@ -22,6 +22,10 @@ class Config:
     COHERE_API_KEY = os.getenv("COHERE_API_KEY")       # Trial tier available
     HUGGINGFACE_API_TOKEN = os.getenv("HUGGINGFACE_API_TOKEN")
 
+    # Supabase Configuration (for pgvector persistent storage)
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
     # Model Configuration
     EMBEDDING_MODEL = "all-MiniLM-L6-v2"
     LLM_MODEL = "llama-3.1-8b-instant"  # Groq model

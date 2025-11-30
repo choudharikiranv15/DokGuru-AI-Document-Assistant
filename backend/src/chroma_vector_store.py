@@ -227,6 +227,33 @@ class ChromaVectorStore:
             self.logger.error(f"Failed to clear collection: {e}")
             return {'success': False, 'error': str(e)}
 
+    def clear_user_documents(self, user_id: str) -> Dict[str, Any]:
+        """Clear all documents belonging to a specific user"""
+        try:
+            self.logger.info(f"Clearing all documents for user: {user_id}")
+
+            # Get all chunks for this user
+            results = self.collection.get(
+                where={"user_id": user_id}
+            )
+
+            if not results['ids']:
+                self.logger.info(f"No documents found for user {user_id}")
+                return {'success': True, 'deleted_count': 0}
+
+            # Count unique documents
+            unique_docs = set(m.get('document_name', 'unknown') for m in results['metadatas']) if results['metadatas'] else set()
+
+            # Delete all chunks for this user
+            self.collection.delete(ids=results['ids'])
+
+            self.logger.info(f"✅ Cleared {len(results['ids'])} chunks from {len(unique_docs)} documents for user {user_id}")
+            return {'success': True, 'deleted_count': len(unique_docs), 'chunks_deleted': len(results['ids'])}
+
+        except Exception as e:
+            self.logger.error(f"Failed to clear user documents: {e}")
+            return {'success': False, 'error': str(e)}
+
     def get_collection_stats(self) -> Dict[str, Any]:
         """Get collection statistics"""
         try:

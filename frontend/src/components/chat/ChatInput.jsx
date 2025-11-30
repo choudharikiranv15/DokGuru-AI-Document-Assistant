@@ -28,12 +28,16 @@ export default function ChatInput({ setIsThinking }) {
 
     const addMessage = useChatStore(state => state.addMessage)
     const updateMessage = useChatStore(state => state.updateMessage)
+    const messages = useChatStore(state => state.messages)  // Get chat history for context
     const currentDocument = useDocumentStore(state => state.currentDocument)
     const documents = useDocumentStore(state => state.documents)
 
+    // Check if input should be blocked
+    const isInputBlocked = loading || isStreaming || isPlayingAudio
+
     const handleSubmit = async (e) => {
         e.preventDefault()
-        if (!input.trim() || loading || isStreaming) return
+        if (!input.trim() || isInputBlocked) return
 
         // Check if any documents are uploaded
         if (!documents || documents.length === 0) {
@@ -69,7 +73,8 @@ export default function ChatInput({ setIsThinking }) {
         setIsThinking(true)
 
         try {
-            const response = await askQuestion(userMessage, currentDocument?.name, 'auto')
+            // Pass chat history for context-aware follow-up questions
+            const response = await askQuestion(userMessage, currentDocument?.name, 'auto', messages)
 
             addMessage({
                 role: 'assistant',
@@ -499,9 +504,9 @@ export default function ChatInput({ setIsThinking }) {
                             type="text"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            placeholder={isListening ? "" : (isStreaming ? "Streaming..." : "Ask a question...")}
-                            disabled={loading || isListening || isStreaming}
-                            className="w-full pl-3 sm:pl-4 pr-10 sm:pr-12 py-2.5 sm:py-3 bg-white/5 backdrop-blur-sm border border-white/10 rounded-full focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-white placeholder-gray-500 transition-all duration-200 text-sm"
+                            placeholder={isListening ? "" : (isStreaming ? "Streaming..." : (isPlayingAudio ? "Audio playing..." : "Ask a question..."))}
+                            disabled={isInputBlocked || isListening}
+                            className="w-full pl-3 sm:pl-4 pr-10 sm:pr-12 py-2.5 sm:py-3 bg-white/5 backdrop-blur-sm border border-white/10 rounded-full focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-white placeholder-gray-500 transition-all duration-200 text-sm disabled:opacity-50"
                         />
 
                         {/* Recording Indicator */}
@@ -564,7 +569,7 @@ export default function ChatInput({ setIsThinking }) {
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
                             type="submit"
-                            disabled={!input.trim() || loading || isListening}
+                            disabled={!input.trim() || isInputBlocked || isListening}
                             className="p-2.5 sm:p-3 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-cyan-500/30 flex-shrink-0"
                         >
                             {loading ? (

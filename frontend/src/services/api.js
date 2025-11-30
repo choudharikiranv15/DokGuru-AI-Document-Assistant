@@ -71,27 +71,87 @@ export const getUploadStatus = async (jobId) => {
     return response.data.job
 }
 
-// Wait for upload to complete with progress callback
-export const waitForUpload = async (jobId, onProgress = null, pollInterval = 500) => {
+// Wait for upload to complete with smooth progress simulation
+export const waitForUpload = async (jobId, onProgress = null, pollInterval = 400) => {
     return new Promise((resolve, reject) => {
+        let simulatedProgress = 10
+        let progressInterval = null
+
+        // Get progress message based on current progress
+        const getProgressMessage = (progress) => {
+            if (progress < 20) return 'Uploading file...'
+            if (progress < 35) return 'Extracting text content...'
+            if (progress < 50) return 'Processing tables & images...'
+            if (progress < 70) return 'Generating embeddings...'
+            if (progress < 90) return 'Indexing document...'
+            return 'Finalizing...'
+        }
+
+        // Simulate smooth progress between backend updates
+        const startProgressSimulation = () => {
+            progressInterval = setInterval(() => {
+                if (simulatedProgress < 90) {
+                    // Increment faster at start, slower as we progress
+                    const increment = simulatedProgress < 40 ? 4 : simulatedProgress < 70 ? 2 : 1
+                    simulatedProgress = Math.min(90, simulatedProgress + increment)
+
+                    if (onProgress) {
+                        onProgress({
+                            progress: Math.round(simulatedProgress),
+                            message: getProgressMessage(simulatedProgress),
+                            status: 'processing'
+                        })
+                    }
+                }
+            }, 250)
+        }
+
+        const stopProgressSimulation = () => {
+            if (progressInterval) {
+                clearInterval(progressInterval)
+                progressInterval = null
+            }
+        }
+
+        // Start simulating progress
+        startProgressSimulation()
+
         const poll = async () => {
             try {
                 const status = await getUploadStatus(jobId)
 
-                // Call progress callback
-                if (onProgress) {
-                    onProgress(status)
+                // Sync with backend progress if available and higher
+                if (status.progress && status.progress > simulatedProgress) {
+                    simulatedProgress = status.progress
+                    if (onProgress) {
+                        onProgress({
+                            progress: Math.round(simulatedProgress),
+                            message: status.message || getProgressMessage(simulatedProgress),
+                            status: status.status
+                        })
+                    }
                 }
 
                 if (status.status === 'completed') {
-                    resolve(status)
+                    stopProgressSimulation()
+                    // Show 100% completion
+                    if (onProgress) {
+                        onProgress({
+                            progress: 100,
+                            message: 'Complete!',
+                            status: 'completed'
+                        })
+                    }
+                    setTimeout(() => resolve(status), 300)
                 } else if (status.status === 'failed') {
+                    stopProgressSimulation()
                     reject(new Error(status.error || 'Processing failed'))
                 } else {
                     // Still processing, poll again
                     setTimeout(poll, pollInterval)
                 }
             } catch (error) {
+                stopProgressSimulation()
                 reject(error)
             }
         }
@@ -138,11 +198,18 @@ export const uploadDocument = async (file) => {
 }
 
 // Chat APIs
-export const askQuestion = async (question, documentName = null, language = 'auto') => {
+export const askQuestion = async (question, documentName = null, language = 'auto', chatHistory = []) => {
+    // Format chat history for context (last 5 exchanges max)
+    const formattedHistory = chatHistory.slice(-10).map(msg => ({
+        role: msg.role,
+        content: msg.text || msg.content
+    }))
+
     const response = await api.post('/ask', {
         question,
         document_name: documentName,
-        language: language  // Support multilingual TTS
+        language: language,  // Support multilingual TTS
+        chat_history: formattedHistory  // Include conversation context
     })
 
     if (!response.data.success) {

@@ -101,113 +101,113 @@ function AnimatedChat({ resetTrigger }) {
     }, [stage, a2.displayedText, a2.isComplete])
 
     return (
-        <div ref={chatContainerRef} className="p-4 space-y-2.5 h-[calc(100%-6.5rem)] overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div ref={chatContainerRef} className="p-2 sm:p-3 md:p-4 space-y-1.5 sm:space-y-2 md:space-y-2.5 h-[calc(100%-4rem)] sm:h-[calc(100%-5rem)] md:h-[calc(100%-6.5rem)] overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             <style>{`
                 .overflow-y-auto::-webkit-scrollbar {
                     display: none;
                 }
             `}</style>
 
-            {/* PDF Indicator */}
+            {/* PDF Indicator - Responsive */}
             <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5, duration: 0.5 }}
-                className="inline-flex items-center gap-2 bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-1.5 backdrop-blur-sm"
+                className="inline-flex items-center gap-1 sm:gap-2 bg-green-500/10 border border-green-500/30 rounded-md sm:rounded-lg px-1.5 py-0.5 sm:px-2 sm:py-1 md:px-3 md:py-1.5 backdrop-blur-sm"
             >
-                <svg className="w-3.5 h-3.5 text-green-500" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="w-2.5 h-2.5 sm:w-3 sm:h-3 md:w-3.5 md:h-3.5 text-green-500" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" />
                 </svg>
-                <span className="text-green-500 text-xs font-medium">biology.pdf</span>
+                <span className="text-green-500 text-[8px] sm:text-[10px] md:text-xs font-medium">biology.pdf</span>
             </motion.div>
 
-            {/* Question 1 */}
+            {/* Question 1 - Responsive */}
             {stage >= 0 && (
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="flex justify-end"
                 >
-                    <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs rounded-xl rounded-tr-sm px-3 py-2 max-w-[70%] shadow-lg">
+                    <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[8px] sm:text-[10px] md:text-xs rounded-lg sm:rounded-xl rounded-tr-sm px-2 py-1 sm:px-2.5 sm:py-1.5 md:px-3 md:py-2 max-w-[75%] sm:max-w-[70%] shadow-lg">
                         {q1.displayedText}
                         {!q1.isComplete && <span className="animate-pulse">▋</span>}
                     </div>
                 </motion.div>
             )}
 
-            {/* Answer 1 */}
+            {/* Answer 1 - Responsive */}
             {stage >= 1 && (
                 <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex gap-2"
+                    className="flex gap-1 sm:gap-1.5 md:gap-2"
                 >
-                    <div className="w-7 h-7 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-full flex-shrink-0 flex items-center justify-center shadow-lg">
-                        <span className="text-white text-[9px] font-bold">AI</span>
+                    <div className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-full flex-shrink-0 flex items-center justify-center shadow-lg">
+                        <span className="text-white text-[6px] sm:text-[8px] md:text-[9px] font-bold">AI</span>
                     </div>
-                    <div className="bg-gray-800/50 text-gray-300 text-xs rounded-xl rounded-tl-sm px-3 py-2 max-w-[80%] backdrop-blur-sm border border-gray-700/50 shadow-lg leading-relaxed">
+                    <div className="bg-gray-800/50 text-gray-300 text-[8px] sm:text-[10px] md:text-xs rounded-lg sm:rounded-xl rounded-tl-sm px-2 py-1 sm:px-2.5 sm:py-1.5 md:px-3 md:py-2 max-w-[80%] backdrop-blur-sm border border-gray-700/50 shadow-lg leading-relaxed">
                         {a1.displayedText}
                         {!a1.isComplete && <span className="animate-pulse ml-1">▋</span>}
                     </div>
                 </motion.div>
             )}
 
-            {/* Question 2 */}
+            {/* Question 2 - Responsive */}
             {stage >= 2 && (
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="flex justify-end"
                 >
-                    <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs rounded-xl rounded-tr-sm px-3 py-2 max-w-[70%] shadow-lg">
+                    <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[8px] sm:text-[10px] md:text-xs rounded-lg sm:rounded-xl rounded-tr-sm px-2 py-1 sm:px-2.5 sm:py-1.5 md:px-3 md:py-2 max-w-[75%] sm:max-w-[70%] shadow-lg">
                         {q2.displayedText}
                         {!q2.isComplete && <span className="animate-pulse">▋</span>}
                     </div>
                 </motion.div>
             )}
 
-            {/* Answer 2 */}
+            {/* Answer 2 - Responsive */}
             {stage >= 3 && (
                 <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex gap-2"
+                    className="flex gap-1 sm:gap-1.5 md:gap-2"
                 >
-                    <div className="w-7 h-7 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-full flex-shrink-0 flex items-center justify-center shadow-lg">
-                        <span className="text-white text-[9px] font-bold">AI</span>
+                    <div className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-full flex-shrink-0 flex items-center justify-center shadow-lg">
+                        <span className="text-white text-[6px] sm:text-[8px] md:text-[9px] font-bold">AI</span>
                     </div>
-                    <div className="bg-gray-800/50 text-gray-300 text-xs rounded-xl rounded-tl-sm px-3 py-2 max-w-[80%] backdrop-blur-sm border border-gray-700/50 shadow-lg leading-relaxed">
+                    <div className="bg-gray-800/50 text-gray-300 text-[8px] sm:text-[10px] md:text-xs rounded-lg sm:rounded-xl rounded-tl-sm px-2 py-1 sm:px-2.5 sm:py-1.5 md:px-3 md:py-2 max-w-[80%] backdrop-blur-sm border border-gray-700/50 shadow-lg leading-relaxed">
                         {a2.displayedText}
                         {!a2.isComplete && <span className="animate-pulse ml-1">▋</span>}
                     </div>
                 </motion.div>
             )}
 
-            {/* Voice Indicator */}
+            {/* Voice Indicator - Responsive */}
             {stage >= 3 && a2.isComplete && (
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="flex items-center gap-2 text-cyan-400 text-xs ml-9"
+                    className="flex items-center gap-1 sm:gap-1.5 md:gap-2 text-cyan-400 text-[8px] sm:text-[10px] md:text-xs ml-6 sm:ml-7 md:ml-9"
                 >
                     <div className="flex gap-0.5">
                         <motion.div
-                            animate={{ height: [6, 12, 6] }}
+                            animate={{ height: [4, 8, 4] }}
                             transition={{ duration: 0.6, repeat: Infinity }}
                             className="w-0.5 bg-cyan-500 rounded-full"
                         />
                         <motion.div
-                            animate={{ height: [8, 14, 8] }}
+                            animate={{ height: [6, 10, 6] }}
                             transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }}
                             className="w-0.5 bg-cyan-500 rounded-full"
                         />
                         <motion.div
-                            animate={{ height: [6, 12, 6] }}
+                            animate={{ height: [4, 8, 4] }}
                             transition={{ duration: 0.6, repeat: Infinity, delay: 0.4 }}
                             className="w-0.5 bg-cyan-500 rounded-full"
                         />
                     </div>
-                    <span className="text-[10px] font-medium">Playing in Kannada...</span>
+                    <span className="text-[7px] sm:text-[9px] md:text-[10px] font-medium">Playing in Kannada...</span>
                 </motion.div>
             )}
         </div>
@@ -371,12 +371,12 @@ export default function Landing() {
                                 </motion.div>
                             </motion.div>
 
-                            {/* Right: Desktop Monitor - Hidden on small mobile, shown on larger screens */}
+                            {/* Right: Desktop Monitor - Now visible on all screens with responsive sizing */}
                             <motion.div
                                 initial={{ opacity: 0, y: 50 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.8, delay: 0.2 }}
-                                className="relative hidden sm:block"
+                                className="relative mt-6 lg:mt-0"
                             >
                                 {/* Desktop Monitor */}
                                 <motion.div
@@ -394,39 +394,39 @@ export default function Landing() {
 
                                             {/* Screen Content - DokGuru Chat Interface */}
                                             <div className="bg-[#0a0f1e] rounded-xl overflow-hidden aspect-video relative shadow-2xl">
-                                                {/* Chat Header */}
-                                                <div className="bg-[#1e293b] border-b border-gray-800 px-6 py-2.5 flex items-center justify-between">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
-                                                            <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+                                                {/* Chat Header - Responsive */}
+                                                <div className="bg-[#1e293b] border-b border-gray-800 px-2 py-1.5 sm:px-4 sm:py-2 md:px-6 md:py-2.5 flex items-center justify-between">
+                                                    <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3">
+                                                        <div className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-md sm:rounded-lg flex items-center justify-center shadow-lg">
+                                                            <svg className="w-3.5 h-3.5 sm:w-5 sm:h-5 md:w-6 md:h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
                                                                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8 0-1.48.41-2.86 1.12-4.06l10.94 10.94C14.86 19.59 13.48 20 12 20zm6.88-3.94L8.94 6.12C10.14 5.41 11.52 5 13 5c4.41 0 8 3.59 8 8 0 1.48-.41 2.86-1.12 4.06z" />
                                                             </svg>
                                                         </div>
-                                                        <span className="text-white text-base font-semibold">DokGuru</span>
+                                                        <span className="text-white text-xs sm:text-sm md:text-base font-semibold">DokGuru</span>
                                                     </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                                                        <span className="text-green-400 text-xs font-medium">Online</span>
+                                                    <div className="flex items-center gap-1 sm:gap-2">
+                                                        <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-green-500 animate-pulse"></div>
+                                                        <span className="text-green-400 text-[8px] sm:text-[10px] md:text-xs font-medium">Online</span>
                                                     </div>
                                                 </div>
 
                                                 {/* Animated Chat Messages */}
                                                 <AnimatedChat resetTrigger={resetTrigger} />
 
-                                                {/* Chat Input */}
-                                                <div className="absolute bottom-0 left-0 right-0 bg-[#1e293b] border-t border-gray-800 px-6 py-2">
-                                                    <div className="flex items-center gap-2 bg-[#0f172a] rounded-lg px-3 py-2 border border-gray-700">
+                                                {/* Chat Input - Responsive */}
+                                                <div className="absolute bottom-0 left-0 right-0 bg-[#1e293b] border-t border-gray-800 px-2 py-1 sm:px-4 sm:py-1.5 md:px-6 md:py-2">
+                                                    <div className="flex items-center gap-1.5 sm:gap-2 bg-[#0f172a] rounded-md sm:rounded-lg px-2 py-1 sm:px-3 sm:py-1.5 md:py-2 border border-gray-700">
                                                         <input
                                                             type="text"
                                                             placeholder="Ask anything..."
-                                                            className="flex-1 bg-transparent text-gray-400 text-xs outline-none"
+                                                            className="flex-1 bg-transparent text-gray-400 text-[10px] sm:text-xs outline-none"
                                                             disabled
                                                         />
                                                         <motion.button
                                                             whileHover={{ scale: 1.1 }}
-                                                            className="w-7 h-7 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg"
+                                                            className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-md sm:rounded-lg flex items-center justify-center shadow-lg flex-shrink-0"
                                                         >
-                                                            <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                                            <svg className="w-2.5 h-2.5 sm:w-3 sm:h-3 md:w-3.5 md:h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
                                                                 <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
                                                                 <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
                                                             </svg>
@@ -437,10 +437,10 @@ export default function Landing() {
                                         </div>
                                     </div>
 
-                                    {/* Monitor Stand */}
+                                    {/* Monitor Stand - Responsive sizes */}
                                     <div className="flex flex-col items-center">
-                                        <div className="w-24 h-16 bg-gradient-to-b from-gray-700 to-gray-800 rounded-b-lg"></div>
-                                        <div className="w-32 h-3 bg-gradient-to-b from-gray-800 to-gray-900 rounded-full"></div>
+                                        <div className="w-16 h-10 sm:w-20 sm:h-12 md:w-24 md:h-16 bg-gradient-to-b from-gray-700 to-gray-800 rounded-b-lg"></div>
+                                        <div className="w-20 h-2 sm:w-24 sm:h-2.5 md:w-32 md:h-3 bg-gradient-to-b from-gray-800 to-gray-900 rounded-full"></div>
                                     </div>
 
                                     {/* Shadow under monitor */}

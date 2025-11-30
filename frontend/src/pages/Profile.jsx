@@ -28,8 +28,16 @@ export default function Profile() {
         className: localStorage.getItem('class_name') || ''
     })
 
+    const [personalInfo, setPersonalInfo] = useState({
+        displayName: localStorage.getItem('display_name') || '',
+        fullName: localStorage.getItem('full_name') || '',
+        phoneNumber: localStorage.getItem('phone_number') || ''
+    })
+
     const [isEditingStudent, setIsEditingStudent] = useState(false)
+    const [isEditingPersonal, setIsEditingPersonal] = useState(false)
     const [editStudentInfo, setEditStudentInfo] = useState({ ...studentInfo })
+    const [editPersonalInfo, setEditPersonalInfo] = useState({ ...personalInfo })
 
     useEffect(() => {
         // Calculate stats
@@ -67,6 +75,20 @@ export default function Profile() {
     const handleCancelEdit = () => {
         setEditStudentInfo({ ...studentInfo })
         setIsEditingStudent(false)
+    }
+
+    const handleSavePersonalInfo = () => {
+        localStorage.setItem('display_name', editPersonalInfo.displayName)
+        localStorage.setItem('full_name', editPersonalInfo.fullName)
+        localStorage.setItem('phone_number', editPersonalInfo.phoneNumber)
+        setPersonalInfo(editPersonalInfo)
+        setIsEditingPersonal(false)
+        toast.success('Personal information updated!')
+    }
+
+    const handleCancelPersonalEdit = () => {
+        setEditPersonalInfo({ ...personalInfo })
+        setIsEditingPersonal(false)
     }
 
     return (
@@ -208,20 +230,20 @@ export default function Profile() {
                         </div>
                     </motion.div>
 
-                    {/* Student Information */}
+                    {/* Personal Information Section */}
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.6, duration: 0.6 }}
+                        transition={{ delay: 0.5, duration: 0.6 }}
                         className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6"
                     >
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
-                            <h2 className="text-xl sm:text-2xl font-bold text-white">Student Information</h2>
-                            {!isEditingStudent ? (
+                            <h2 className="text-xl sm:text-2xl font-bold text-white">Personal Information</h2>
+                            {!isEditingPersonal ? (
                                 <motion.button
                                     whileHover={{ scale: 1.05 }}
                                     whileTap={{ scale: 0.95 }}
-                                    onClick={() => setIsEditingStudent(true)}
+                                    onClick={() => setIsEditingPersonal(true)}
                                     className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white text-sm rounded-lg transition-all"
                                 >
                                     Edit
@@ -231,7 +253,7 @@ export default function Profile() {
                                     <motion.button
                                         whileHover={{ scale: 1.05 }}
                                         whileTap={{ scale: 0.95 }}
-                                        onClick={handleSaveStudentInfo}
+                                        onClick={handleSavePersonalInfo}
                                         className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-purple-600 text-white text-sm rounded-lg"
                                     >
                                         Save
@@ -239,7 +261,7 @@ export default function Profile() {
                                     <motion.button
                                         whileHover={{ scale: 1.05 }}
                                         whileTap={{ scale: 0.95 }}
-                                        onClick={handleCancelEdit}
+                                        onClick={handleCancelPersonalEdit}
                                         className="px-4 py-2 bg-white/10 text-white text-sm rounded-lg"
                                     >
                                         Cancel
@@ -248,7 +270,82 @@ export default function Profile() {
                             )}
                         </div>
                         <div className="space-y-4">
-                            {/* Student Status Toggle */}
+                            {/* Display Name */}
+                            <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+                                <div className="flex items-center gap-3 flex-1">
+                                    <div className="w-10 h-10 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                                        <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-white font-medium mb-1">Display Name</p>
+                                        {isEditingPersonal ? (
+                                            <input
+                                                type="text"
+                                                value={editPersonalInfo.displayName}
+                                                onChange={(e) => setEditPersonalInfo({...editPersonalInfo, displayName: e.target.value})}
+                                                placeholder="How should we call you?"
+                                                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                                            />
+                                        ) : (
+                                            <p className="text-gray-400 text-sm">{personalInfo.displayName || 'Not set'}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Full Name */}
+                            <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+                                <div className="flex items-center gap-3 flex-1">
+                                    <div className="w-10 h-10 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                                        <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                        </svg>
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-white font-medium mb-1">Full Name</p>
+                                        {isEditingPersonal ? (
+                                            <input
+                                                type="text"
+                                                value={editPersonalInfo.fullName}
+                                                onChange={(e) => setEditPersonalInfo({...editPersonalInfo, fullName: e.target.value})}
+                                                placeholder="Your full name"
+                                                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                                            />
+                                        ) : (
+                                            <p className="text-gray-400 text-sm">{personalInfo.fullName || 'Not set'}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Phone Number */}
+                            <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+                                <div className="flex items-center gap-3 flex-1">
+                                    <div className="w-10 h-10 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                                        <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                        </svg>
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-white font-medium mb-1">Phone Number</p>
+                                        {isEditingPersonal ? (
+                                            <input
+                                                type="tel"
+                                                value={editPersonalInfo.phoneNumber}
+                                                onChange={(e) => setEditPersonalInfo({...editPersonalInfo, phoneNumber: e.target.value})}
+                                                placeholder="+91 XXXXX XXXXX"
+                                                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                                            />
+                                        ) : (
+                                            <p className="text-gray-400 text-sm">{personalInfo.phoneNumber || 'Not set'}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Student Toggle */}
                             <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-lg flex items-center justify-center">
@@ -258,81 +355,120 @@ export default function Profile() {
                                     </div>
                                     <div>
                                         <p className="text-white font-medium">I am a Student</p>
-                                        <p className="text-gray-400 text-sm">Get student benefits</p>
+                                        <p className="text-gray-400 text-sm">Enable to add college details</p>
                                     </div>
                                 </div>
-                                {isEditingStudent ? (
-                                    <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={editStudentInfo.isStudent}
-                                            onChange={(e) => setEditStudentInfo({...editStudentInfo, isStudent: e.target.checked})}
-                                            className="sr-only peer"
-                                        />
-                                        <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-cyan-500 peer-checked:to-purple-600"></div>
-                                    </label>
-                                ) : (
-                                    <span className={`px-3 py-1 rounded-full text-sm ${studentInfo.isStudent ? 'bg-cyan-500/20 text-cyan-400' : 'bg-gray-700 text-gray-400'}`}>
-                                        {studentInfo.isStudent ? 'Yes' : 'No'}
-                                    </span>
-                                )}
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={studentInfo.isStudent}
+                                        onChange={(e) => {
+                                            const newValue = e.target.checked
+                                            localStorage.setItem('is_student', newValue)
+                                            setStudentInfo({...studentInfo, isStudent: newValue})
+                                            setEditStudentInfo({...editStudentInfo, isStudent: newValue})
+                                        }}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-cyan-500 peer-checked:to-purple-600"></div>
+                                </label>
                             </div>
-
-                            {/* College Name */}
-                            {(isEditingStudent ? editStudentInfo.isStudent : studentInfo.isStudent) && (
-                                <>
-                                    <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
-                                        <div className="flex items-center gap-3 flex-1">
-                                            <div className="w-10 h-10 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                                                </svg>
-                                            </div>
-                                            <div className="flex-1">
-                                                <p className="text-white font-medium mb-1">College/Institution</p>
-                                                {isEditingStudent ? (
-                                                    <input
-                                                        type="text"
-                                                        value={editStudentInfo.collegeName}
-                                                        onChange={(e) => setEditStudentInfo({...editStudentInfo, collegeName: e.target.value})}
-                                                        placeholder="Enter your college name"
-                                                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
-                                                    />
-                                                ) : (
-                                                    <p className="text-gray-400 text-sm">{studentInfo.collegeName || 'Not specified'}</p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Class/Year */}
-                                    <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
-                                        <div className="flex items-center gap-3 flex-1">
-                                            <div className="w-10 h-10 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                </svg>
-                                            </div>
-                                            <div className="flex-1">
-                                                <p className="text-white font-medium mb-1">Class/Year</p>
-                                                {isEditingStudent ? (
-                                                    <input
-                                                        type="text"
-                                                        value={editStudentInfo.className}
-                                                        onChange={(e) => setEditStudentInfo({...editStudentInfo, className: e.target.value})}
-                                                        placeholder="e.g., 3rd Year, B.Tech CSE"
-                                                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
-                                                    />
-                                                ) : (
-                                                    <p className="text-gray-400 text-sm">{studentInfo.className || 'Not specified'}</p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </>
-                            )}
                         </div>
                     </motion.div>
+
+                    {/* Student Information - Only shown for students */}
+                    {studentInfo.isStudent && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.6, duration: 0.6 }}
+                            className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6"
+                        >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
+                                <h2 className="text-xl sm:text-2xl font-bold text-white">Student Information</h2>
+                                {!isEditingStudent ? (
+                                    <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={() => setIsEditingStudent(true)}
+                                        className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white text-sm rounded-lg transition-all"
+                                    >
+                                        Edit
+                                    </motion.button>
+                                ) : (
+                                    <div className="flex gap-2">
+                                        <motion.button
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={handleSaveStudentInfo}
+                                            className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-purple-600 text-white text-sm rounded-lg"
+                                        >
+                                            Save
+                                        </motion.button>
+                                        <motion.button
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={handleCancelEdit}
+                                            className="px-4 py-2 bg-white/10 text-white text-sm rounded-lg"
+                                        >
+                                            Cancel
+                                        </motion.button>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="space-y-4">
+                                {/* College Name */}
+                                <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+                                    <div className="flex items-center gap-3 flex-1">
+                                        <div className="w-10 h-10 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                                            <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                            </svg>
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-white font-medium mb-1">College/Institution</p>
+                                            {isEditingStudent ? (
+                                                <input
+                                                    type="text"
+                                                    value={editStudentInfo.collegeName}
+                                                    onChange={(e) => setEditStudentInfo({...editStudentInfo, collegeName: e.target.value})}
+                                                    placeholder="Enter your college name"
+                                                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                                                />
+                                            ) : (
+                                                <p className="text-gray-400 text-sm">{studentInfo.collegeName || 'Not specified'}</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Class/Year */}
+                                <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+                                    <div className="flex items-center gap-3 flex-1">
+                                        <div className="w-10 h-10 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                                            <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                            </svg>
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-white font-medium mb-1">Class/Year</p>
+                                            {isEditingStudent ? (
+                                                <input
+                                                    type="text"
+                                                    value={editStudentInfo.className}
+                                                    onChange={(e) => setEditStudentInfo({...editStudentInfo, className: e.target.value})}
+                                                    placeholder="e.g., 3rd Year, B.Tech CSE"
+                                                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                                                />
+                                            ) : (
+                                                <p className="text-gray-400 text-sm">{studentInfo.className || 'Not specified'}</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
 
                     {/* Account Settings */}
                     <motion.div

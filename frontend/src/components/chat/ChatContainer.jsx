@@ -148,7 +148,7 @@ export default function ChatContainer() {
                                     },
                                     {
                                         icon: '🌐',
-                                        title: 'Trilingual',
+                                        title: 'Multilingual',
                                         desc: 'EN, KN & HI'
                                     },
                                     {

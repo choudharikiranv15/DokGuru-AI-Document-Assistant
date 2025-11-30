@@ -245,33 +245,35 @@ class MultilingualTTSHandler:
 
             logger.info(f"Synthesizing with gTTS ({language}): {len(text)} characters")
 
-            # Improved settings for better pronunciation
-            # Use regional variants for Indian languages (not all variants are supported by gTTS)
-            lang_variants = {
-                'hi': 'hi',  # Hindi - gTTS doesn't support hi-IN
-                'kn': 'kn',  # Kannada - gTTS doesn't support kn-IN
-                'en': 'en'   # English - gTTS doesn't support en-IN, use generic en
+            # Google TTS Top-Level Domains for better quality
+            # Using co.in domain for Indian languages gives better pronunciation
+            tld_map = {
+                'hi': 'co.in',  # Hindi - Indian domain
+                'kn': 'co.in',  # Kannada - Indian domain
+                'ta': 'co.in',  # Tamil - Indian domain
+                'te': 'co.in',  # Telugu - Indian domain
+                'en': 'com',    # English - default domain
             }
 
-            # Get the best language variant
-            tts_lang = lang_variants.get(language, language)
+            tld = tld_map.get(language, 'com')
 
-            # For Kannada, use slower speed for better clarity
-            use_slow = (language == 'kn')
+            # For regional languages, use slower speed for better clarity
+            use_slow = language in ['kn', 'ta', 'te', 'ml']
 
             # Create gTTS object with improved settings
             tts = gTTS(
                 text=text,
-                lang=tts_lang,
-                slow=use_slow,  # Slower for Kannada = clearer
-                lang_check=False  # Skip lang check to use regional variants
+                lang=language,
+                slow=use_slow,  # Slower for regional languages = clearer
+                tld=tld,  # Use appropriate domain for better pronunciation
+                lang_check=False  # Skip lang check
             )
 
             # Save to file
             tts.save(output_path)
 
-            # Get audio duration (approximate)
-            duration = self._estimate_duration(text, language)
+            # Get actual audio duration using mutagen
+            duration = self._get_mp3_duration(output_path) or self._estimate_duration(text, language)
 
             result = {
                 'audio_path': output_path,
@@ -288,7 +290,67 @@ class MultilingualTTSHandler:
 
         except Exception as e:
             logger.error(f"gTTS synthesis failed: {e}")
-            raise
+            # Try pyttsx3 as last resort for offline TTS
+            return self._synthesize_with_pyttsx3(text, language, output_filename)
+
+    def _synthesize_with_pyttsx3(self, text: str, language: str, output_filename: Optional[str] = None) -> Dict[str, Any]:
+        """Offline TTS fallback using pyttsx3"""
+        try:
+            import pyttsx3
+
+            if output_filename is None:
+                text_hash = hashlib.md5(text.encode()).hexdigest()[:8]
+                output_filename = f"pyttsx3_{language}_{text_hash}"
+
+            output_path = os.path.join(self.output_dir, f"{output_filename}.mp3")
+
+            logger.info(f"Synthesizing with pyttsx3 (offline fallback): {len(text)} characters")
+
+            # Initialize pyttsx3 engine
+            engine = pyttsx3.init()
+
+            # Set properties for better quality
+            engine.setProperty('rate', 150)  # Speed
+            engine.setProperty('volume', 1.0)  # Volume
+
+            # Try to find voice for language
+            voices = engine.getProperty('voices')
+            for voice in voices:
+                if language in voice.languages or language in voice.id.lower():
+                    engine.setProperty('voice', voice.id)
+                    break
+
+            # Save to file
+            engine.save_to_file(text, output_path)
+            engine.runAndWait()
+
+            duration = self._estimate_duration(text, language)
+
+            result = {
+                'audio_path': output_path,
+                'duration': duration,
+                'text': text,
+                'filename': f"{output_filename}.mp3",
+                'language': language,
+                'language_name': self.SUPPORTED_LANGUAGES.get(language, language),
+                'engine': 'pyttsx3 (offline)'
+            }
+
+            logger.info(f"✓ pyttsx3 synthesis complete. Duration: ~{duration:.2f}s")
+            return result
+
+        except Exception as e:
+            logger.error(f"pyttsx3 fallback failed: {e}")
+            raise Exception(f"All TTS methods failed for {language}: {e}")
+
+    def _get_mp3_duration(self, audio_path: str) -> Optional[float]:
+        """Get actual MP3 duration using mutagen"""
+        try:
+            from mutagen.mp3 import MP3
+            audio = MP3(audio_path)
+            return audio.info.length
+        except:
+            return None
 
     def _synthesize_with_coqui(self, text: str, output_filename: Optional[str] = None) -> Dict[str, Any]:
         """Synthesize speech using Coqui TTS (English only, fallback)"""

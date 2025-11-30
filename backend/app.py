@@ -1403,6 +1403,7 @@ def ask_question():
     question = data.get('question', '').strip()
     document_name = data.get('document_name')  # Optional document filter
     language = data.get('language', 'auto')  # Optional language for TTS ('auto', 'en', 'hi', 'kn')
+    client_chat_history = data.get('chat_history', [])  # Chat history from frontend
 
     if not question:
         return jsonify({'success': False, 'message': 'Please enter a question'})
@@ -1431,8 +1432,17 @@ def ask_question():
                 'no_documents': True
             })
 
-        # Get conversation history from Redis
-        conversation_history = rag_system.cache.get_user_conversation(user_id)
+        # Build conversation history - prefer client history if available
+        # This enables context-aware follow-up questions
+        if client_chat_history:
+            # Convert client format [{role, content}] to simple list [q, a, q, a...]
+            conversation_history = []
+            for msg in client_chat_history[-10:]:  # Last 5 exchanges (10 messages)
+                if msg.get('content'):
+                    conversation_history.append(msg['content'])
+        else:
+            # Fallback to Redis cache
+            conversation_history = rag_system.cache.get_user_conversation(user_id)
 
         # Get response with user_id filtering for multi-tenancy
         response = rag_system.query(
@@ -2269,13 +2279,17 @@ def delete_document(document_name):
 @app.route('/documents/clear-all', methods=['POST'])
 @require_auth
 def clear_all_documents():
-    """Clear all documents from the vector store (requires authentication)"""
+    """Clear all documents for the current user only (requires authentication)"""
     try:
-        result = rag_system.clear_all_documents()
+        user_id = request.user_id
+        result = rag_system.clear_all_documents(user_id=user_id)
+
+        # Clear document cache after successful deletion
         if result['success']:
+            clear_document_cache()
             return jsonify({
                 'success': True,
-                'message': f"Cleared {result['deleted_count']} documents from the system"
+                'message': f"Cleared {result['deleted_count']} documents from your account"
             })
         else:
             return jsonify(result)

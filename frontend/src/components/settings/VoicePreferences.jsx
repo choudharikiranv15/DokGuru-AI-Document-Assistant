@@ -3,8 +3,26 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { getAvailableEngines, getVoicePreferences, updateVoicePreferences } from '../../services/api'
 import toast from 'react-hot-toast'
 
+// Default engines for fallback
+const DEFAULT_ENGINES = {
+    'auto': {
+        name: 'Auto (Smart Selection)',
+        description: 'Automatically selects the best engine based on language and text',
+        available: true,
+        quality: 'mixed',
+        free: true
+    },
+    'gtts': {
+        name: 'Google TTS (Standard)',
+        description: 'Free, reliable, supports 100+ languages',
+        available: true,
+        quality: 'good',
+        free: true
+    }
+}
+
 export default function VoicePreferences() {
-    const [engines, setEngines] = useState({})
+    const [engines, setEngines] = useState(DEFAULT_ENGINES)
     const [userPlan, setUserPlan] = useState('free')
     const [azureConfigured, setAzureConfigured] = useState(false)
     const [preferences, setPreferences] = useState({
@@ -14,6 +32,7 @@ export default function VoicePreferences() {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [isExpanded, setIsExpanded] = useState(false)
+    const [loadError, setLoadError] = useState(false)
 
     useEffect(() => {
         fetchData()
@@ -22,18 +41,27 @@ export default function VoicePreferences() {
     const fetchData = async () => {
         try {
             setLoading(true)
-            const [enginesData, prefsData] = await Promise.all([
-                getAvailableEngines(),
-                getVoicePreferences()
-            ])
+            setLoadError(false)
 
-            setEngines(enginesData.engines)
-            setUserPlan(enginesData.user_plan)
-            setAzureConfigured(enginesData.azure_configured)
-            setPreferences(prefsData)
+            // Fetch engines first (required)
+            const enginesData = await getAvailableEngines()
+            setEngines(enginesData.engines || DEFAULT_ENGINES)
+            setUserPlan(enginesData.user_plan || 'free')
+            setAzureConfigured(enginesData.azure_configured || false)
+
+            // Try to fetch preferences, but use defaults if it fails
+            try {
+                const prefsData = await getVoicePreferences()
+                setPreferences(prefsData || { engine_preference: 'auto', language_preference: 'auto' })
+            } catch {
+                // Voice preferences failed, use defaults - non-critical
+                setPreferences({ engine_preference: 'auto', language_preference: 'auto' })
+            }
         } catch (error) {
-            // Error logged server-side only
-            toast.error('Failed to load voice preferences')
+            // Engine fetch failed - show default engines
+            setLoadError(true)
+            setEngines(DEFAULT_ENGINES)
+            toast.error('Voice settings unavailable - using defaults')
         } finally {
             setLoading(false)
         }
@@ -89,8 +117,16 @@ export default function VoicePreferences() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center p-8">
-                <div className="w-8 h-8 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin"></div>
+            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-xl flex items-center justify-center">
+                        <div className="w-6 h-6 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin"></div>
+                    </div>
+                    <div>
+                        <h3 className="text-xl font-bold text-white">Voice Preferences</h3>
+                        <p className="text-gray-400 text-sm">Loading voice settings...</p>
+                    </div>
+                </div>
             </div>
         )
     }
@@ -111,7 +147,7 @@ export default function VoicePreferences() {
                     <div className="text-left">
                         <h3 className="text-xl font-bold text-white">Voice Preferences</h3>
                         <p className="text-gray-400 text-sm">
-                            Current: {engines[preferences.engine_preference]?.name || 'Loading...'}
+                            Current: {engines[preferences.engine_preference]?.name || 'Auto (Smart Selection)'}
                         </p>
                     </div>
                 </div>
@@ -136,6 +172,29 @@ export default function VoicePreferences() {
                         className="border-t border-white/10"
                     >
                         <div className="p-6 space-y-4">
+                            {/* Error Banner with Retry */}
+                            {loadError && (
+                                <div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                                    <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                    </svg>
+                                    <div className="flex-1">
+                                        <p className="text-amber-300 text-sm font-medium">
+                                            Couldn't load voice settings from server
+                                        </p>
+                                        <p className="text-amber-400/70 text-xs mt-1">
+                                            Showing default options. Your saved preferences may not be reflected.
+                                        </p>
+                                        <button
+                                            onClick={fetchData}
+                                            className="mt-2 px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs rounded-lg transition-colors"
+                                        >
+                                            Retry
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Info Banner */}
                             <div className="flex items-start gap-3 p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
                                 <svg className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">

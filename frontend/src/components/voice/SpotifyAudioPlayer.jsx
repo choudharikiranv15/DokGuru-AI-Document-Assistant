@@ -359,6 +359,29 @@ export default function SpotifyAudioPlayer({ audioUrl, audioUrls }) {
                     )}
                 </button>
 
+                {/* Stop Button - Stops and resets audio */}
+                {isPlaying && (
+                    <button
+                        onClick={() => {
+                            if (audioRef.current) {
+                                audioRef.current.pause()
+                                audioRef.current.currentTime = 0
+                            }
+                            setIsPlaying(false)
+                            setCurrentTime(0)
+                            if (isPlaylist) {
+                                setCurrentTrackIndex(0)
+                            }
+                        }}
+                        className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center bg-red-500/20 text-red-400 hover:bg-red-500/30 hover:text-red-300 rounded-full transition-all"
+                        title="Stop"
+                    >
+                        <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M6 6h12v12H6z" />
+                        </svg>
+                    </button>
+                )}
+
                 {/* Next Track (playlist only) */}
                 {isPlaylist && (
                     <button
