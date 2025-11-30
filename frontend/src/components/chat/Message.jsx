@@ -16,10 +16,8 @@ function Message({ message }) {
     const pollIntervalRef = useRef(null)
     const pollAttemptsRef = useRef(0)
 
-    // Don't render streaming messages that have no content yet
-    if (message.streaming && (!message.text || message.text.trim() === '')) {
-        return null
-    }
+    // Check if this is an empty streaming message (render null later, but hooks must run first)
+    const isEmptyStreamingMessage = message.streaming && (!message.text || message.text.trim() === '')
 
     // Update state when message props change (e.g., streaming complete)
     useEffect(() => {
@@ -125,6 +123,12 @@ function Message({ message }) {
             // Error logged server-side only
             toast.error('Failed to submit feedback')
         }
+    }
+
+    // Don't render streaming messages that have no content yet
+    // This check must come AFTER all hooks to comply with React's rules of hooks
+    if (isEmptyStreamingMessage) {
+        return null
     }
 
     return (
