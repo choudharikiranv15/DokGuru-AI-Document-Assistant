@@ -1,8 +1,7 @@
 absl-py==2.1.0
 accelerate==0.21.0
 aenum==3.1.16
-# Editable install with no version control (agent-starter-python==1.0.0)
--e d:\cheeko\xiaozhi-esp32-server\main\livekit-server
+# Removed local editable install for CI compatibility
 aioconsole==0.8.1
 aiofiles==24.1.0
 aiohappyeyeballs==2.4.6
@@ -242,8 +241,7 @@ livekit-plugins-openai==1.2.14
 livekit-plugins-silero==1.2.14
 livekit-plugins-turn-detector==1.2.14
 livekit-protocol==1.0.6
-# Editable install with no version control (llava==1.2.2.post1)
--e d:\kiran\rohum\llava\llava
+# Removed local editable install for CI compatibility
 llvmlite==0.43.0
 lm-format-enforcer==0.10.10
 loguru==0.7.3
