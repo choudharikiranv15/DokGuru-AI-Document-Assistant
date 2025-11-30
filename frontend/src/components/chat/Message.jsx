@@ -138,7 +138,7 @@ function Message({ message }) {
             transition={{ duration: 0.3 }}
             className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4 sm:mb-6 px-2 sm:px-0`}
         >
-            <div className={`flex gap-2 sm:gap-3 max-w-[95%] sm:max-w-[85%] md:max-w-3xl ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+            <div className={`flex gap-2 sm:gap-3 max-w-[95%] sm:max-w-[85%] md:max-w-3xl overflow-hidden ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
                 {/* Avatar */}
                 <motion.div
                     initial={{ scale: 0 }}
@@ -168,13 +168,13 @@ function Message({ message }) {
         `}>
                     {/* Text */}
                     {isUser ? (
-                        <div className="prose prose-sm max-w-none">
-                            <p className="leading-relaxed text-white">
+                        <div className="prose prose-sm max-w-full overflow-hidden">
+                            <p className="leading-relaxed text-white break-words">
                                 {message.text}
                             </p>
                         </div>
                     ) : (
-                        <div className="markdown-content">
+                        <div className="markdown-content overflow-hidden break-words">
                             {/* Streaming indicator */}
                             {message.streaming && (
                                 <div className="flex items-center gap-2 mb-2 text-cyan-400">
@@ -211,7 +211,7 @@ function Message({ message }) {
 
                                     // Paragraphs
                                     p: ({ node, ...props }) => (
-                                        <p className="text-gray-100 leading-relaxed mb-3" {...props} />
+                                        <p className="text-gray-100 leading-relaxed mb-3 break-words overflow-wrap-anywhere" {...props} />
                                     ),
 
                                     // Lists
@@ -250,12 +250,12 @@ function Message({ message }) {
                                     // Code
                                     code: ({ node, inline, ...props }) =>
                                         inline ? (
-                                            <code className="bg-gray-800 text-pink-400 px-1.5 py-0.5 rounded text-sm font-mono" {...props} />
+                                            <code className="bg-gray-800 text-pink-400 px-1.5 py-0.5 rounded text-sm font-mono break-all" {...props} />
                                         ) : (
-                                            <code className="block bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono mb-3" {...props} />
+                                            <code className="block bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono mb-3 whitespace-pre-wrap break-words" {...props} />
                                         ),
                                     pre: ({ node, ...props }) => (
-                                        <pre className="bg-gray-900 rounded-lg overflow-hidden mb-3" {...props} />
+                                        <pre className="bg-gray-900 rounded-lg overflow-x-auto mb-3 max-w-full" {...props} />
                                     ),
 
                                     // Strong/Bold
