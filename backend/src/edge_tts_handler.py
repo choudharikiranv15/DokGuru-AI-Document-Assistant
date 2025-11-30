@@ -36,6 +36,9 @@ class EdgeTTSHandler:
     - Gujarati (gu-IN)
     - Marathi (mr-IN)
     - English (en-IN, en-US)
+
+    Note: EdgeTTS may fail with 403 errors in cloud environments (Cloud Run, AWS, etc.)
+    due to Microsoft blocking cloud provider IPs. In such cases, use Azure TTS or gTTS.
     """
 
     # Best voices for Indian languages
@@ -50,6 +53,11 @@ class EdgeTTSHandler:
         'gu': 'gu-IN-DhwaniNeural',  # Gujarati (female, natural)
         'mr': 'mr-IN-AarohiNeural',  # Marathi (female, natural)
     }
+
+    # Circuit breaker: Track consecutive failures to skip EdgeTTS if it's consistently failing
+    _consecutive_failures = 0
+    _max_failures_before_disable = 3
+    _disabled_until = 0  # Unix timestamp when to re-enable
 
     def __init__(self, output_dir="./data/audio"):
         """
@@ -115,6 +123,14 @@ class EdgeTTSHandler:
         if not self.available:
             raise Exception("EdgeTTS not available")
 
+        # Circuit breaker: Check if EdgeTTS is temporarily disabled due to repeated failures
+        import time
+        current_time = time.time()
+        if EdgeTTSHandler._disabled_until > current_time:
+            remaining = int(EdgeTTSHandler._disabled_until - current_time)
+            logger.warning(f"EdgeTTS circuit breaker active. Disabled for {remaining}s more. Use fallback.")
+            raise Exception(f"EdgeTTS temporarily disabled (circuit breaker). Re-enabling in {remaining}s")
+
         try:
             if not text or len(text.strip()) == 0:
                 raise ValueError("Text cannot be empty")
@@ -150,11 +166,27 @@ class EdgeTTSHandler:
                 'voice': self.VOICE_MAP.get(language, 'en-US-AriaNeural')
             }
 
+            # Success: Reset circuit breaker
+            EdgeTTSHandler._consecutive_failures = 0
+
             logger.info(f"EdgeTTS synthesis complete. Duration: {duration:.2f}s")
             return result
 
         except Exception as e:
             logger.error(f"EdgeTTS error: {str(e)}")
+
+            # Circuit breaker: Track consecutive failures
+            error_str = str(e).lower()
+            if '403' in error_str or '429' in error_str or 'connection' in error_str:
+                EdgeTTSHandler._consecutive_failures += 1
+                logger.warning(f"EdgeTTS failure count: {EdgeTTSHandler._consecutive_failures}/{EdgeTTSHandler._max_failures_before_disable}")
+
+                if EdgeTTSHandler._consecutive_failures >= EdgeTTSHandler._max_failures_before_disable:
+                    # Disable EdgeTTS for 5 minutes
+                    import time
+                    EdgeTTSHandler._disabled_until = time.time() + 300  # 5 minutes
+                    logger.warning(f"EdgeTTS circuit breaker triggered! Disabling for 5 minutes. Use fallback TTS.")
+
             raise Exception(f"Failed to synthesize speech with EdgeTTS: {str(e)}")
 
     async def _synthesize_async(self, text: str, voice: str, output_path: str, max_retries: int = 3):

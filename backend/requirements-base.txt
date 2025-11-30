@@ -36,7 +36,7 @@ scipy==1.16.3
 # ==========================================
 gTTS==2.5.4  # Google TTS - Fallback for all languages
 azure-cognitiveservices-speech==1.47.0  # Azure Neural TTS - Premium (optional)
-edge-tts==6.1.9  # Microsoft Edge TTS - Excellent for Indian languages (HI, KN, TA, TE)
+edge-tts>=7.2.0  # Microsoft Edge TTS - Excellent for Indian languages (HI, KN, TA, TE)
 # Piper TTS - Installed via binary (see Dockerfile) - Fast offline English TTS
 # TTS==0.22.0  # Coqui TTS - DISABLED to save ~500MB
 

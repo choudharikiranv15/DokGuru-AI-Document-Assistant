@@ -113,7 +113,7 @@ RUN mkdir -p /app/tts_models && \
 
 # Install edge-tts (Microsoft Edge TTS - Excellent quality for Indian languages)
 # Supports: Hindi, Kannada, Tamil, Telugu, Malayalam, Bengali, Gujarati, Marathi, etc.
-RUN pip install --no-cache-dir edge-tts==6.1.9
+RUN pip install --no-cache-dir edge-tts>=7.2.0
 
 # ============================================================================
 # Pre-download MiniLM model

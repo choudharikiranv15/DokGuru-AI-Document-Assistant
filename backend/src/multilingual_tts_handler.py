@@ -272,8 +272,20 @@ class MultilingualTTSHandler:
             # Save to file
             tts.save(output_path)
 
+            # Verify file was created and has content
+            if not os.path.exists(output_path):
+                raise Exception("gTTS failed to create audio file")
+
+            file_size = os.path.getsize(output_path)
+            if file_size < 1000:  # Less than 1KB is likely an error
+                logger.warning(f"gTTS generated very small file ({file_size} bytes), may be corrupted")
+
             # Get actual audio duration using mutagen
             duration = self._get_mp3_duration(output_path) or self._estimate_duration(text, language)
+
+            # Ensure minimum duration
+            if duration < 0.5:
+                duration = self._estimate_duration(text, language)
 
             result = {
                 'audio_path': output_path,
@@ -285,7 +297,7 @@ class MultilingualTTSHandler:
                 'engine': 'gTTS'
             }
 
-            logger.info(f"✓ gTTS synthesis complete. Duration: ~{duration:.2f}s")
+            logger.info(f"✓ gTTS synthesis complete. Duration: ~{duration:.2f}s, Size: {file_size} bytes")
             return result
 
         except Exception as e:

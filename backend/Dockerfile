@@ -83,7 +83,7 @@ RUN pip install --no-cache-dir \
     gTTS==2.5.4 \
     pydub==0.25.1 \
     soundfile==0.13.1 \
-    edge-tts==6.1.9 \
+    edge-tts>=7.2.0 \
     pdfplumber==0.10.3 \
     pypdf==3.17.4 \
     PyMuPDF==1.23.8 \
