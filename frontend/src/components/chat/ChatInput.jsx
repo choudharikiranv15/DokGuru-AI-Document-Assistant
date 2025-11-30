@@ -47,8 +47,8 @@ export default function ChatInput({ setIsThinking }) {
         const userMessage = input.trim()
         setInput('')
 
-        // Add user message
-        const userMessageId = Date.now()
+        // Add user message with unique ID prefix
+        const userMessageId = `user-${Date.now()}`
         addMessage({
             id: userMessageId,
             role: 'user',
@@ -98,8 +98,9 @@ export default function ChatInput({ setIsThinking }) {
         setAudioQueue([])
         setCurrentAudioIndex(0)
 
-        // Create streaming message placeholder
-        const streamMessageId = Date.now()
+        // Create streaming message placeholder with unique ID
+        // Use different ID format to avoid collision with user message ID
+        const streamMessageId = `stream-${Date.now()}`
         streamMessageIdRef.current = streamMessageId
         addMessage({
             id: streamMessageId,
