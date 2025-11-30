@@ -199,9 +199,6 @@ export default function ChatInput({ setIsThinking }) {
                                 break
 
                             case 'done':
-                                // Use locally tracked audio URLs (state may not be updated yet due to closure)
-                                const firstAudioUrl = collectedAudioUrls.length > 0 ? collectedAudioUrls[0] : null
-
                                 // Mark streaming as complete - audio will stop after last sentence
                                 setStreamingComplete(true)
                                 setTotalExpectedAudio(collectedAudioUrls.length)
@@ -211,8 +208,9 @@ export default function ChatInput({ setIsThinking }) {
                                     streaming: false,
                                     streamingGenerated: true, // Mark as generated via streaming (hides "Generate Audio" button)
                                     metadata: { sources: data.sources, sources_used: data.sources_used },
-                                    // Set audio URL so the audio player shows up
-                                    audioUrl: firstAudioUrl,
+                                    // Pass ALL audio URLs for the playlist player
+                                    audioUrl: collectedAudioUrls.length > 0 ? collectedAudioUrls[0] : null,
+                                    audioUrls: collectedAudioUrls, // Full playlist of all audio segments
                                     audioReady: collectedAudioUrls.length > 0,
                                     audioGenerating: false
                                 })

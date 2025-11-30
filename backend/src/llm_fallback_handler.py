@@ -15,19 +15,27 @@ logger = logging.getLogger(__name__)
 # Provider tier configuration
 # PRO_TIER: Best models, highest limits - for paid users
 # FREE_TIER: Good models, free limits - for free users
+# Note: Free tier has rate limits, fallback handles 429 errors automatically
 PROVIDER_TIERS = {
     'pro': [
         'Groq',           # Fast, reliable, good limits
-        'Cerebras',       # Ultra-fast, high free tier
+        'Cerebras',       # Ultra-fast, high free tier (fastest!)
         'Google Gemini',  # 1M context, very capable
-        'DeepSeek',       # No rate limits, cheap
         'Mistral',        # High quality European
     ],
     'free': [
-        'SambaNova',      # Free tier available
-        'OpenRouter',     # Free models available
-        'Cohere',         # Trial tier
-        'Hugging Face',   # Free tier with limits
+        'Google Gemini',          # 1500 free requests/day, great multilingual
+        'SambaNova',              # Free tier available
+        # OpenRouter free models (verified from API Nov 2025)
+        'OpenRouter-Grok',        # Grok 4.1 Fast - xAI (most reliable)
+        'OpenRouter-Llama',       # Llama 3.3 70B - reliable
+        'OpenRouter-Gemma',       # Gemma 3 27B - fast
+        'OpenRouter-Mistral',     # Mistral Small 3.1 - vision
+        'OpenRouter-Llama-405B',  # Hermes 3 Llama 405B - largest
+        'OpenRouter-Qwen3',       # Qwen 3 235B - multilingual
+        'OpenRouter-Gemini',      # Gemini 2.0 Flash - 1M context
+        'Cohere',                 # Trial tier
+        'Hugging Face',           # Free tier with limits
     ]
 }
 
@@ -166,28 +174,32 @@ class LLMFallbackHandler:
             logger.warning(f"SambaNova initialization failed: {e}")
 
     def _init_deepseek(self):
-        """Initialize DeepSeek - No rate limits, very cheap"""
-        try:
-            api_key = getattr(self.config, 'DEEPSEEK_API_KEY', None)
-            if api_key:
-                client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://api.deepseek.com/v1"
-                )
-                self.providers.append({
-                    'name': 'DeepSeek',
-                    'client': client,
-                    'text_model': 'deepseek-chat',
-                    'text_model_large': 'deepseek-chat',
-                    'vision_model': None,
-                    'max_tokens': 8000,
-                    'max_context': 64000,
-                    'temperature': 0.7,
-                    'tier': 'pro'
-                })
-                logger.info("[OK] DeepSeek initialized (no rate limits)")
-        except Exception as e:
-            logger.warning(f"DeepSeek initialization failed: {e}")
+        """Initialize DeepSeek - Requires credits/payment, skipped for now"""
+        # DeepSeek requires account balance - not free tier
+        # Uncomment below if you have DeepSeek credits
+        logger.info("[SKIP] DeepSeek skipped (requires payment)")
+        return
+        # try:
+        #     api_key = getattr(self.config, 'DEEPSEEK_API_KEY', None)
+        #     if api_key:
+        #         client = OpenAI(
+        #             api_key=api_key,
+        #             base_url="https://api.deepseek.com/v1"
+        #         )
+        #         self.providers.append({
+        #             'name': 'DeepSeek',
+        #             'client': client,
+        #             'text_model': 'deepseek-chat',
+        #             'text_model_large': 'deepseek-chat',
+        #             'vision_model': None,
+        #             'max_tokens': 8000,
+        #             'max_context': 64000,
+        #             'temperature': 0.7,
+        #             'tier': 'pro'
+        #         })
+        #         logger.info("[OK] DeepSeek initialized (no rate limits)")
+        # except Exception as e:
+        #     logger.warning(f"DeepSeek initialization failed: {e}")
 
     def _init_mistral(self):
         """Initialize Mistral - High quality, European"""
@@ -214,26 +226,92 @@ class LLMFallbackHandler:
             logger.warning(f"Mistral initialization failed: {e}")
 
     def _init_openrouter(self):
-        """Initialize OpenRouter - Aggregator with free models"""
+        """Initialize OpenRouter - Aggregator with multiple free models for better fallback"""
         try:
             api_key = getattr(self.config, 'OPENROUTER_API_KEY', None)
             if api_key:
+                # Multiple free models from OpenRouter for better reliability
+                # Each configured as a separate provider entry for automatic fallback
+                # Verified from OpenRouter API Nov 2025
+                # Note: Free tier has ~50 req/day limit, 429 errors trigger fallback
+                free_models = [
+                    {
+                        # Grok 4.1 Fast - xAI's model, very reliable
+                        'name': 'OpenRouter-Grok',
+                        'text_model': 'x-ai/grok-4.1-fast:free',
+                        'text_model_large': 'x-ai/grok-4.1-fast:free',
+                        'vision_model': None,
+                        'max_context': 131072,
+                    },
+                    {
+                        # Llama 3.3 70B - Meta's latest, very reliable
+                        'name': 'OpenRouter-Llama',
+                        'text_model': 'meta-llama/llama-3.3-70b-instruct:free',
+                        'text_model_large': 'meta-llama/llama-3.3-70b-instruct:free',
+                        'vision_model': None,
+                        'max_context': 128000,
+                    },
+                    {
+                        # Gemma 3 27B - Google's efficient model
+                        'name': 'OpenRouter-Gemma',
+                        'text_model': 'google/gemma-3-27b-it:free',
+                        'text_model_large': 'google/gemma-3-27b-it:free',
+                        'vision_model': None,
+                        'max_context': 96000,
+                    },
+                    {
+                        # Mistral Small 3.1 - European, supports vision
+                        'name': 'OpenRouter-Mistral',
+                        'text_model': 'mistralai/mistral-small-3.1-24b-instruct:free',
+                        'text_model_large': 'mistralai/mistral-small-3.1-24b-instruct:free',
+                        'vision_model': 'mistralai/mistral-small-3.1-24b-instruct:free',
+                        'max_context': 96000,
+                    },
+                    {
+                        # Hermes 3 Llama 405B - Largest free model!
+                        'name': 'OpenRouter-Llama-405B',
+                        'text_model': 'nousresearch/hermes-3-llama-3.1-405b:free',
+                        'text_model_large': 'nousresearch/hermes-3-llama-3.1-405b:free',
+                        'vision_model': None,
+                        'max_context': 128000,
+                    },
+                    {
+                        # Qwen 3 235B - Alibaba's large model
+                        'name': 'OpenRouter-Qwen3',
+                        'text_model': 'qwen/qwen3-235b-a22b:free',
+                        'text_model_large': 'qwen/qwen3-235b-a22b:free',
+                        'vision_model': None,
+                        'max_context': 40960,
+                    },
+                    {
+                        # Gemini 2.0 Flash Exp - 1M context!
+                        'name': 'OpenRouter-Gemini',
+                        'text_model': 'google/gemini-2.0-flash-exp:free',
+                        'text_model_large': 'google/gemini-2.0-flash-exp:free',
+                        'vision_model': 'google/gemini-2.0-flash-exp:free',
+                        'max_context': 1000000,
+                    },
+                ]
+
                 client = OpenAI(
                     api_key=api_key,
                     base_url="https://openrouter.ai/api/v1"
                 )
-                self.providers.append({
-                    'name': 'OpenRouter',
-                    'client': client,
-                    'text_model': 'meta-llama/llama-3.1-8b-instruct:free',
-                    'text_model_large': 'meta-llama/llama-3.1-70b-instruct:free',
-                    'vision_model': 'meta-llama/llama-3.2-11b-vision-instruct:free',
-                    'max_tokens': 8000,
-                    'max_context': 128000,
-                    'temperature': 0.7,
-                    'tier': 'free'
-                })
-                logger.info("[OK] OpenRouter initialized (free models)")
+
+                for model_config in free_models:
+                    self.providers.append({
+                        'name': model_config['name'],
+                        'client': client,
+                        'text_model': model_config['text_model'],
+                        'text_model_large': model_config['text_model_large'],
+                        'vision_model': model_config['vision_model'],
+                        'max_tokens': 8000,
+                        'max_context': model_config['max_context'],
+                        'temperature': 0.7,
+                        'tier': 'free'
+                    })
+
+                logger.info(f"[OK] OpenRouter initialized with {len(free_models)} free models")
         except Exception as e:
             logger.warning(f"OpenRouter initialization failed: {e}")
 
@@ -250,8 +328,9 @@ class LLMFallbackHandler:
                 self.providers.append({
                     'name': 'Cohere',
                     'client': client,
-                    'text_model': 'command-r',
-                    'text_model_large': 'command-r-plus',
+                    # Updated models - command-r was deprecated Sep 2025
+                    'text_model': 'command-r-08-2024',
+                    'text_model_large': 'command-r-plus-08-2024',
                     'vision_model': None,
                     'max_tokens': 4000,
                     'max_context': 128000,
@@ -274,11 +353,12 @@ class LLMFallbackHandler:
                 self.providers.append({
                     'name': 'Hugging Face',
                     'client': client,
-                    'text_model': 'meta-llama/Meta-Llama-3.1-8B-Instruct',
-                    'text_model_large': 'meta-llama/Meta-Llama-3.1-70B-Instruct',
+                    # Updated to Qwen models available on HF Inference API
+                    'text_model': 'Qwen/Qwen2.5-7B-Instruct',
+                    'text_model_large': 'Qwen/Qwen2.5-72B-Instruct',
                     'vision_model': None,
                     'max_tokens': 4000,
-                    'max_context': 8000,
+                    'max_context': 32000,
                     'temperature': 0.7,
                     'tier': 'free'
                 })

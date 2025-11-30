@@ -449,7 +449,10 @@ function Message({ message }) {
                                     exit={{ opacity: 0, y: -10 }}
                                     className="mt-3"
                                 >
-                                    <SpotifyAudioPlayer audioUrl={audioUrl} />
+                                    <SpotifyAudioPlayer
+                                        audioUrl={audioUrl}
+                                        audioUrls={message.audioUrls}
+                                    />
                                 </motion.div>
                             )}
                         </AnimatePresence>

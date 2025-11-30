@@ -4,15 +4,22 @@ EdgeTTS Handler - High-quality TTS for Indian Languages
 Supports: Hindi, Kannada, Tamil, Telugu, Malayalam, Bengali, Gujarati, Marathi, and more
 Performance: 0.5-1s synthesis time
 Quality: Excellent (Microsoft Neural TTS)
+
+NOTE: Uses dedicated thread with asyncio event loop to work with gevent workers in production.
 """
 import os
 import logging
 import hashlib
 import asyncio
+import threading
+import concurrent.futures
 from typing import Dict, Any, Optional
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Thread-local storage for event loops (needed for gevent compatibility)
+_thread_local = threading.local()
 
 
 class EdgeTTSHandler:
@@ -68,6 +75,31 @@ class EdgeTTSHandler:
         """Check if EdgeTTS is available"""
         return self.available
 
+    def _run_async_in_thread(self, coro):
+        """
+        Run async coroutine in a dedicated thread with its own event loop.
+        This is required for compatibility with gevent workers in production.
+
+        Args:
+            coro: Async coroutine to run
+
+        Returns:
+            Result of the coroutine
+        """
+        def run_in_new_loop():
+            # Create a new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(coro)
+            finally:
+                loop.close()
+
+        # Use ThreadPoolExecutor to run in a separate thread
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(run_in_new_loop)
+            return future.result(timeout=60)  # 60 second timeout
+
     def synthesize(self, text: str, language: str = 'en', output_filename: Optional[str] = None) -> Dict[str, Any]:
         """
         Synthesize speech from text
@@ -101,9 +133,10 @@ class EdgeTTSHandler:
                 # Get voice for language
                 voice = self.VOICE_MAP.get(language, 'en-US-AriaNeural')
 
-                # Generate new audio (run async function in sync context)
+                # Generate new audio using thread-safe async execution
+                # This works with gevent workers in production
                 logger.info(f"Synthesizing with EdgeTTS ({voice}): {len(text)} characters")
-                asyncio.run(self._synthesize_async(text, voice, output_path))
+                self._run_async_in_thread(self._synthesize_async(text, voice, output_path))
 
             # Get audio duration
             duration = self._get_audio_duration(output_path)
@@ -203,21 +236,17 @@ class EdgeTTSHandler:
             logger.info(f"Streaming synthesis with EdgeTTS ({voice}): {len(text)} characters")
 
             # Create async generator and run in sync context
-            async def _generate():
-                async for chunk in self._synthesize_streaming_async(text, voice):
-                    yield chunk
-
-            # Run async generator in sync context using asyncio
-            import asyncio
-
             async def _run_generator():
                 chunks = []
-                async for chunk in _generate():
-                    chunks.append(chunk)
+                communicate = self.edge_tts.Communicate(text, voice)
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        chunks.append(chunk["data"])
                 return chunks
 
-            # Get all chunks (EdgeTTS is fast, this completes in 0.5s)
-            chunks = asyncio.run(_run_generator())
+            # Get all chunks using thread-safe async execution
+            # This works with gevent workers in production
+            chunks = self._run_async_in_thread(_run_generator())
 
             # Yield chunks to caller
             for chunk in chunks:
