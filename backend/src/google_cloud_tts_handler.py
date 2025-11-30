@@ -10,12 +10,12 @@ Supports:
 - Telugu (te-IN) - Neural2 voices
 
 Quality Tiers:
-- Standard: Good quality, cheaper ($4/1M chars)
-- WaveNet: Excellent quality ($16/1M chars)
-- Neural2: Best quality, natural ($16/1M chars)
+- Standard: Good quality, FREE up to 4M chars/month ($4/1M after)
+- WaveNet: Excellent quality ($16/1M chars, 1M free)
+- Neural2: Best quality, natural ($16/1M chars, 1M free)
 
-Free Tier: 1M standard chars/month, 0 WaveNet/Neural2
-With $300 credits: ~18M Neural2 characters
+DEFAULT: Using Standard voices to stay within FREE tier
+Set USE_NEURAL_VOICES=true for higher quality (costs more)
 
 Authentication Options:
 1. GOOGLE_APPLICATION_CREDENTIALS env var (path to service account JSON)
@@ -50,36 +50,37 @@ class GoogleCloudTTSHandler:
     - Or running on GCP with default credentials
     """
 
-    # Best Neural2 voices for Indian languages
-    VOICE_MAP = {
+    # Standard voices (FREE tier - 4M chars/month)
+    # Use these by default to minimize costs
+    VOICE_MAP_STANDARD = {
         'en': {
             'language_code': 'en-US',
-            'name': 'en-US-Neural2-F',  # Female, natural
+            'name': 'en-US-Standard-C',  # Female, good quality
             'ssml_gender': 'FEMALE'
         },
         'en-IN': {
             'language_code': 'en-IN',
-            'name': 'en-IN-Neural2-A',  # Indian English female
+            'name': 'en-IN-Standard-A',  # Indian English female
             'ssml_gender': 'FEMALE'
         },
         'hi': {
             'language_code': 'hi-IN',
-            'name': 'hi-IN-Neural2-A',  # Hindi female
+            'name': 'hi-IN-Standard-A',  # Hindi female
             'ssml_gender': 'FEMALE'
         },
         'kn': {
             'language_code': 'kn-IN',
-            'name': 'kn-IN-Standard-A',  # Kannada female (Neural2 not available yet)
+            'name': 'kn-IN-Standard-A',  # Kannada female
             'ssml_gender': 'FEMALE'
         },
         'ta': {
             'language_code': 'ta-IN',
-            'name': 'ta-IN-Neural2-A',  # Tamil female
+            'name': 'ta-IN-Standard-A',  # Tamil female
             'ssml_gender': 'FEMALE'
         },
         'te': {
             'language_code': 'te-IN',
-            'name': 'te-IN-Standard-A',  # Telugu female (Neural2 not available yet)
+            'name': 'te-IN-Standard-A',  # Telugu female
             'ssml_gender': 'FEMALE'
         },
         'ml': {
@@ -104,12 +105,73 @@ class GoogleCloudTTSHandler:
         },
     }
 
-    def __init__(self, output_dir: str = "./data/audio"):
+    # Neural2 voices (Premium - $16/1M chars, better quality)
+    # Only used if USE_NEURAL_VOICES=true
+    VOICE_MAP_NEURAL = {
+        'en': {
+            'language_code': 'en-US',
+            'name': 'en-US-Neural2-F',  # Female, natural
+            'ssml_gender': 'FEMALE'
+        },
+        'en-IN': {
+            'language_code': 'en-IN',
+            'name': 'en-IN-Neural2-A',  # Indian English female
+            'ssml_gender': 'FEMALE'
+        },
+        'hi': {
+            'language_code': 'hi-IN',
+            'name': 'hi-IN-Neural2-A',  # Hindi female
+            'ssml_gender': 'FEMALE'
+        },
+        'kn': {
+            'language_code': 'kn-IN',
+            'name': 'kn-IN-Standard-A',  # Kannada (Neural2 not available)
+            'ssml_gender': 'FEMALE'
+        },
+        'ta': {
+            'language_code': 'ta-IN',
+            'name': 'ta-IN-Neural2-A',  # Tamil female
+            'ssml_gender': 'FEMALE'
+        },
+        'te': {
+            'language_code': 'te-IN',
+            'name': 'te-IN-Standard-A',  # Telugu (Neural2 not available)
+            'ssml_gender': 'FEMALE'
+        },
+        'ml': {
+            'language_code': 'ml-IN',
+            'name': 'ml-IN-Standard-A',  # Malayalam
+            'ssml_gender': 'FEMALE'
+        },
+        'bn': {
+            'language_code': 'bn-IN',
+            'name': 'bn-IN-Standard-A',  # Bengali
+            'ssml_gender': 'FEMALE'
+        },
+        'mr': {
+            'language_code': 'mr-IN',
+            'name': 'mr-IN-Standard-A',  # Marathi
+            'ssml_gender': 'FEMALE'
+        },
+        'gu': {
+            'language_code': 'gu-IN',
+            'name': 'gu-IN-Standard-A',  # Gujarati
+            'ssml_gender': 'FEMALE'
+        },
+    }
+
+    # Default to Standard voices (FREE tier)
+    VOICE_MAP = VOICE_MAP_STANDARD
+
+    def __init__(self, output_dir: str = "./data/audio", use_neural: bool = None):
         """
         Initialize Google Cloud TTS handler
 
         Args:
             output_dir: Directory to save generated audio files
+            use_neural: Use Neural2 voices (higher quality, costs $16/1M chars)
+                       If None, checks USE_NEURAL_VOICES env var
+                       Default: False (use Standard voices - FREE up to 4M chars/month)
         """
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
@@ -117,6 +179,14 @@ class GoogleCloudTTSHandler:
         self.client = None
         self.available = False
         self._temp_creds_file = None
+
+        # Determine voice quality tier
+        if use_neural is None:
+            use_neural = os.environ.get('USE_NEURAL_VOICES', 'false').lower() == 'true'
+
+        self.use_neural = use_neural
+        self.voice_map = self.VOICE_MAP_NEURAL if use_neural else self.VOICE_MAP_STANDARD
+        voice_tier = "Neural2 (premium)" if use_neural else "Standard (FREE tier)"
 
         if not GOOGLE_TTS_AVAILABLE:
             logger.warning("Google Cloud TTS library not installed")
@@ -133,7 +203,7 @@ class GoogleCloudTTSHandler:
                 self.client = texttospeech.TextToSpeechClient()
 
             self.available = True
-            logger.info("Google Cloud TTS initialized (Neural2 voices available)")
+            logger.info(f"Google Cloud TTS initialized - Using {voice_tier} voices")
         except Exception as e:
             logger.warning(f"Google Cloud TTS initialization failed: {e}")
             self.available = False
@@ -218,8 +288,8 @@ class GoogleCloudTTSHandler:
                     'engine': 'Google Cloud TTS (cached)'
                 }
 
-            # Get voice config for language
-            voice_config = self.VOICE_MAP.get(language, self.VOICE_MAP['en'])
+            # Get voice config for language (uses self.voice_map set in __init__)
+            voice_config = self.voice_map.get(language, self.voice_map['en'])
 
             # Build synthesis input
             synthesis_input = texttospeech.SynthesisInput(text=text)
