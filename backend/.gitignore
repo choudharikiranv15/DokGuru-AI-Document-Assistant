@@ -22,3 +22,8 @@ rag_env/
 # OS
 .DS_Store
 Thumbs.db
+
+# Google Cloud credentials (NEVER commit)
+gcloud-tts-key.json
+*-key.json
+*.json.key

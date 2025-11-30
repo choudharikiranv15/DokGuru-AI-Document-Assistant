@@ -84,6 +84,7 @@ RUN pip install --no-cache-dir \
     pydub==0.25.1 \
     soundfile==0.13.1 \
     edge-tts>=7.2.0 \
+    google-cloud-texttospeech>=2.14.0 \
     pdfplumber==0.10.3 \
     pypdf==3.17.4 \
     PyMuPDF==1.23.8 \

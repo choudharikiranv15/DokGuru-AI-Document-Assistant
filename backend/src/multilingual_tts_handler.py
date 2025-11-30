@@ -100,7 +100,23 @@ class MultilingualTTSHandler:
             logger.warning(f"Azure TTS not available: {e}")
             self.azure_available = False
 
-        logger.info(f"Multilingual TTS initialized (Piper: {self.piper_available}, EdgeTTS: {self.edge_available}, Azure: {self.azure_available}, gTTS: ✓)")
+        # Initialize Google Cloud TTS (High quality, $300 credits available)
+        self.gcloud_handler = None
+        self.gcloud_available = False
+
+        try:
+            from src.google_cloud_tts_handler import GoogleCloudTTSHandler
+            self.gcloud_handler = GoogleCloudTTSHandler(output_dir=output_dir)
+            if self.gcloud_handler.is_available():
+                self.gcloud_available = True
+                logger.info("✓ Google Cloud TTS available (Neural2 voices)")
+            else:
+                logger.info("ℹ Google Cloud TTS not configured.")
+        except Exception as e:
+            logger.warning(f"Google Cloud TTS not available: {e}")
+            self.gcloud_available = False
+
+        logger.info(f"Multilingual TTS initialized (Piper: {self.piper_available}, EdgeTTS: {self.edge_available}, GCloud: {self.gcloud_available}, Azure: {self.azure_available}, gTTS: ✓)")
 
     def detect_language(self, text: str) -> str:
         """
@@ -191,17 +207,19 @@ class MultilingualTTSHandler:
 
             else:
                 # Auto mode: Optimized engine selection
-                # English: Piper (0.3s, offline) → EdgeTTS (0.5s, online) → gTTS (2s, fallback)
-                # Regional (HI/KN/TA/TE): EdgeTTS (0.5s, high quality) → gTTS (2s, fallback)
-                # Other: gTTS
+                # Priority: Piper (offline) → Google Cloud (reliable) → EdgeTTS (may fail in cloud) → Azure → gTTS
+                # Google Cloud TTS is prioritized over EdgeTTS because it doesn't have 403 issues in cloud environments
 
                 if language == 'en':
-                    # English: Piper > EdgeTTS > Azure > gTTS
+                    # English: Piper > GCloud > EdgeTTS > Azure > gTTS
                     if self.piper_available:
                         logger.info("Using Piper TTS for English (0.3s, offline, best)")
                         return self._synthesize_with_piper(cleaned_text, output_filename)
+                    elif self.gcloud_available:
+                        logger.info("Using Google Cloud TTS for English (Neural2, excellent)")
+                        return self._synthesize_with_gcloud(cleaned_text, language, output_filename)
                     elif self.edge_available:
-                        logger.info("Using EdgeTTS for English (0.5s, online, excellent)")
+                        logger.info("Using EdgeTTS for English (0.5s, online)")
                         return self._synthesize_with_edge(cleaned_text, language, output_filename)
                     elif self.azure_available:
                         logger.info("Using Azure Neural TTS for English (premium)")
@@ -211,8 +229,12 @@ class MultilingualTTSHandler:
                         return self._synthesize_with_gtts(cleaned_text, language, output_filename)
 
                 elif language in ['hi', 'kn', 'ta', 'te', 'ml', 'bn', 'gu', 'mr']:
-                    # Indian languages: EdgeTTS > Azure > gTTS
-                    if self.edge_available:
+                    # Indian languages: GCloud > EdgeTTS > Azure > gTTS
+                    # Google Cloud TTS is more reliable in cloud environments (no 403 errors)
+                    if self.gcloud_available:
+                        logger.info(f"Using Google Cloud TTS for {self.SUPPORTED_LANGUAGES.get(language, language)} (Neural2, reliable)")
+                        return self._synthesize_with_gcloud(cleaned_text, language, output_filename)
+                    elif self.edge_available:
                         logger.info(f"Using EdgeTTS for {self.SUPPORTED_LANGUAGES.get(language, language)} (0.5s, excellent quality)")
                         return self._synthesize_with_edge(cleaned_text, language, output_filename)
                     elif self.azure_available:
@@ -420,6 +442,27 @@ class MultilingualTTSHandler:
                 return self._synthesize_with_edge(text, 'en', output_filename)
             else:
                 return self._synthesize_with_gtts(text, 'en', output_filename)
+
+    def _synthesize_with_gcloud(self, text: str, language: str, output_filename: Optional[str] = None) -> Dict[str, Any]:
+        """Synthesize speech using Google Cloud TTS (Neural2 voices, reliable in cloud)"""
+        try:
+            if not self.gcloud_handler or not self.gcloud_available:
+                raise Exception("Google Cloud TTS not available")
+
+            logger.info(f"Synthesizing with Google Cloud TTS: {len(text)} characters")
+
+            result = self.gcloud_handler.synthesize(text, language, output_filename)
+            result['language_name'] = self.SUPPORTED_LANGUAGES.get(language, language)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Google Cloud TTS failed: {e}. Falling back to EdgeTTS/gTTS")
+            # Fallback chain: EdgeTTS > gTTS
+            if self.edge_available:
+                return self._synthesize_with_edge(text, language, output_filename)
+            else:
+                return self._synthesize_with_gtts(text, language, output_filename)
 
     def _synthesize_with_edge(self, text: str, language: str, output_filename: Optional[str] = None) -> Dict[str, Any]:
         """Synthesize speech using EdgeTTS (Excellent quality for Indian languages)"""

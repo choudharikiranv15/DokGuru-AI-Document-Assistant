@@ -137,6 +137,7 @@ jobs:
             --update-env-vars "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" \
             --update-env-vars "POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }}" \
             --update-env-vars "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" \
+            --update-env-vars "GOOGLE_CLOUD_CREDENTIALS=${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}" \
             --update-env-vars "FRONTEND_URL=https://dokguru.vercel.app" \
             --update-env-vars "CORS_ORIGINS=https://dokguru.vercel.app"
 

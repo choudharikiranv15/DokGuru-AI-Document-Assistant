@@ -80,3 +80,4 @@ deprecated==1.3.1
 gTTS==2.5.4
 edge-tts==7.2.3
 langdetect==1.0.9
+google-cloud-texttospeech>=2.14.0  # Google Cloud TTS - Neural2 voices for Indian languages
