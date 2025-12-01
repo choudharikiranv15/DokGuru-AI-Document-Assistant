@@ -154,8 +154,8 @@ class EdgeTTSHandler:
                 logger.info(f"Synthesizing with EdgeTTS ({voice}): {len(text)} characters")
                 self._run_async_in_thread(self._synthesize_async(text, voice, output_path))
 
-            # Get audio duration
-            duration = self._get_audio_duration(output_path)
+            # Get audio duration (with text fallback for estimation)
+            duration = self._get_audio_duration(output_path, text=text)
 
             result = {
                 'audio_path': output_path,
@@ -222,22 +222,43 @@ class EdgeTTSHandler:
         # All retries exhausted
         raise last_error or Exception("EdgeTTS synthesis failed after all retries")
 
-    def _get_audio_duration(self, audio_path: str) -> float:
-        """Get duration of MP3 audio file in seconds"""
+    def _get_audio_duration(self, audio_path: str, text: str = None) -> float:
+        """Get duration of MP3 audio file in seconds with robust fallbacks"""
+        # Try mutagen first (most accurate)
         try:
             from mutagen.mp3 import MP3
             audio = MP3(audio_path)
-            return audio.info.length
+            duration = audio.info.length
+            if duration > 0:
+                return duration
         except ImportError:
-            # Fallback: estimate duration (average speech rate ~150 words/min)
-            logger.warning("mutagen not installed. Using estimated duration.")
-            with open(audio_path, 'rb') as f:
-                file_size = len(f.read())
-            # Rough estimate: 1 second of MP3 ≈ 16KB at 128kbps
-            return file_size / 16000
+            logger.warning("mutagen not installed. Using fallback duration estimation.")
         except Exception as e:
-            logger.warning(f"Could not get audio duration: {str(e)}")
-            return 0.0
+            logger.warning(f"Could not get audio duration with mutagen: {str(e)}")
+
+        # Fallback 1: File size based estimation
+        try:
+            file_size = os.path.getsize(audio_path)
+            if file_size > 1000:  # File has content (> 1KB)
+                # MP3 at 128kbps: ~16KB per second
+                estimated = file_size / 16000
+                if estimated > 0.5:  # Reasonable duration
+                    logger.info(f"Using file-size based duration: {estimated:.2f}s")
+                    return estimated
+        except Exception as e:
+            logger.warning(f"File size estimation failed: {str(e)}")
+
+        # Fallback 2: Text-based estimation (if text provided)
+        if text:
+            # Average speech rate: 150 words/minute for Indian languages
+            word_count = len(text.split())
+            estimated = max(2.0, (word_count / 150) * 60)
+            logger.info(f"Using text-based duration: {estimated:.2f}s ({word_count} words)")
+            return estimated
+
+        # Last resort: Return minimum duration (better than 0)
+        logger.warning("All duration estimation methods failed. Using default 3.0s")
+        return 3.0
 
     @staticmethod
     def get_supported_languages() -> list:
