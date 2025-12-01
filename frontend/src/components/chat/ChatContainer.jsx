@@ -35,9 +35,9 @@ export default function ChatContainer() {
     }, [])
 
     return (
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#0f172a]">
+        <div className="flex-1 flex flex-col w-full max-w-full overflow-hidden bg-[#0f172a]">
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 sm:px-4 py-4 sm:py-6">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden w-full max-w-full px-2 sm:px-4 py-4 sm:py-6">
                 {messages.length === 0 ? (
                     <div className="h-full flex items-center justify-center relative overflow-hidden py-4 sm:py-0">
                         {/* Animated Background Orbs - Responsive sizes */}
@@ -196,7 +196,7 @@ export default function ChatContainer() {
             </div>
 
             {/* Input Area */}
-            <div className="border-t border-gray-800 bg-[#1e293b]">
+            <div className="border-t border-gray-800 bg-[#1e293b] w-full max-w-full overflow-x-hidden">
                 <ChatInput setIsThinking={setIsThinking} />
             </div>
         </div>

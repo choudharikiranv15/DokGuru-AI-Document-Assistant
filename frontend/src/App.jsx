@@ -32,51 +32,51 @@ function MainApp() {
             {/* Onboarding Tutorial - Shows on first visit */}
             <OnboardingTutorial />
 
-            <div className="flex h-screen overflow-hidden bg-[#0f172a]">
+            <div className="flex h-screen w-full max-w-full overflow-hidden bg-[#0f172a]">
                 {/* Sidebar */}
                 <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
                 {/* Main Content */}
-                <div className="flex-1 flex flex-col">
+                <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
                     {/* Header */}
-                    <header className="bg-[#1e293b] border-b border-white/10 px-6 py-4 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
+                    <header className="bg-[#1e293b] border-b border-white/10 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between w-full max-w-full overflow-x-hidden">
+                        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
                             <button
                                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                                className="p-2 hover:bg-white/10 rounded-lg transition-all duration-200 text-gray-400 hover:text-white"
+                                className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg transition-all duration-200 text-gray-400 hover:text-white flex-shrink-0"
                             >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                                 </svg>
                             </button>
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/50">
-                                    <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+                            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/50 flex-shrink-0">
+                                    <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
                                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8 0-1.48.41-2.86 1.12-4.06l10.94 10.94C14.86 19.59 13.48 20 12 20zm6.88-3.94L8.94 6.12C10.14 5.41 11.52 5 13 5c4.41 0 8 3.59 8 8 0 1.48-.41 2.86-1.12 4.06z"/>
                                     </svg>
                                 </div>
-                                <h1 className="text-xl font-bold text-white">
+                                <h1 className="text-base sm:text-xl font-bold text-white truncate">
                                     Dok<span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-600">Guru</span>
                                 </h1>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                             <motion.button
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
                                 onClick={() => navigate('/profile')}
-                                className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all text-gray-300 hover:text-white"
+                                className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg sm:rounded-xl transition-all text-gray-300 hover:text-white"
                             >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                 </svg>
-                                <span className="text-sm">Profile</span>
+                                <span className="text-xs sm:text-sm">Profile</span>
                             </motion.button>
                         </div>
                     </header>
 
                     {/* Browser Compatibility Warning */}
-                    <div className="px-6 pt-4">
+                    <div className="px-3 sm:px-6 pt-3 sm:pt-4 w-full max-w-full overflow-x-hidden">
                         <BrowserWarning />
                     </div>
 
