@@ -13,6 +13,8 @@ rag_env/
 /data/pdfs/*
 /data/audio/*
 /data/chroma_db/*
+/data/piper_models/*
+/data/processed/*
 !data/pdfs/.gitkeep
 !data/audio/.gitkeep
 
