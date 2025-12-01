@@ -139,13 +139,13 @@ function Message({ message }) {
             className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4 sm:mb-6 px-1 sm:px-2 w-full max-w-full box-border overflow-hidden`}
         >
             <div className={`flex gap-2 sm:gap-3 max-w-[95%] sm:max-w-[85%] md:max-w-3xl min-w-0 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-                {/* Avatar */}
+                {/* Avatar - Hidden on mobile to save space, visible on md+ */}
                 <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ delay: 0.1, type: 'spring', stiffness: 200 }}
                     className={`
-          flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white text-xs sm:text-sm font-semibold shadow-lg
+          hidden md:flex flex-shrink-0 w-8 h-8 rounded-full items-center justify-center text-white text-xs font-semibold shadow-lg
           ${isUser
                         ? 'bg-gradient-to-br from-cyan-500 to-purple-600 shadow-cyan-500/50'
                         : 'bg-gradient-to-br from-purple-500 to-pink-600 shadow-purple-500/50'
@@ -160,7 +160,7 @@ function Message({ message }) {
                     animate={{ scale: 1, opacity: 1 }}
                     transition={{ delay: 0.15, duration: 0.3 }}
                     className={`
-          flex-1 min-w-0 rounded-xl sm:rounded-2xl p-3 sm:p-4 backdrop-blur-sm
+          flex-1 min-w-0 rounded-xl sm:rounded-2xl p-2 sm:p-3 md:p-4 backdrop-blur-sm
           ${isUser
                         ? 'bg-gradient-to-br from-cyan-600/90 to-purple-600/90 text-white shadow-lg shadow-cyan-500/20'
                         : 'bg-white/5 border border-white/10 text-gray-100 shadow-lg shadow-purple-500/10'
@@ -169,7 +169,7 @@ function Message({ message }) {
                     {/* Text */}
                     {isUser ? (
                         <div className="prose prose-sm max-w-full overflow-x-hidden overflow-y-auto">
-                            <p className="leading-relaxed text-white break-words overflow-wrap-anywhere">
+                            <p className="text-sm sm:text-base leading-relaxed text-white break-words overflow-wrap-anywhere">
                                 {message.text}
                             </p>
                         </div>
@@ -198,31 +198,31 @@ function Message({ message }) {
                             <ReactMarkdown
                                 remarkPlugins={[remarkGfm]}
                                 components={{
-                                    // Headings
+                                    // Headings - Smaller on mobile for compact view
                                     h1: ({ node, ...props }) => (
-                                        <h1 className="text-2xl font-bold text-cyan-400 mb-3 mt-4 flex items-center gap-2" {...props} />
+                                        <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-cyan-400 mb-2 sm:mb-3 mt-3 sm:mt-4 flex items-center gap-2" {...props} />
                                     ),
                                     h2: ({ node, ...props }) => (
-                                        <h2 className="text-xl font-semibold text-cyan-400 mb-2 mt-4 flex items-center gap-2" {...props} />
+                                        <h2 className="text-base sm:text-lg md:text-xl font-semibold text-cyan-400 mb-2 mt-3 sm:mt-4 flex items-center gap-2" {...props} />
                                     ),
                                     h3: ({ node, ...props }) => (
-                                        <h3 className="text-lg font-semibold text-purple-400 mb-2 mt-3" {...props} />
+                                        <h3 className="text-sm sm:text-base md:text-lg font-semibold text-purple-400 mb-2 mt-2 sm:mt-3" {...props} />
                                     ),
 
-                                    // Paragraphs
+                                    // Paragraphs - Smaller on mobile for compact view
                                     p: ({ node, ...props }) => (
-                                        <p className="text-gray-100 leading-relaxed mb-3 break-words overflow-wrap-anywhere" {...props} />
+                                        <p className="text-sm sm:text-base text-gray-100 leading-relaxed mb-2 sm:mb-3 break-words overflow-wrap-anywhere" {...props} />
                                     ),
 
-                                    // Lists
+                                    // Lists - Smaller on mobile for compact view
                                     ul: ({ node, ...props }) => (
-                                        <ul className="list-disc list-inside space-y-1 mb-3 text-gray-100" {...props} />
+                                        <ul className="text-sm sm:text-base list-disc list-inside space-y-1 mb-2 sm:mb-3 text-gray-100" {...props} />
                                     ),
                                     ol: ({ node, ...props }) => (
-                                        <ol className="list-decimal list-inside space-y-1 mb-3 text-gray-100" {...props} />
+                                        <ol className="text-sm sm:text-base list-decimal list-inside space-y-1 mb-2 sm:mb-3 text-gray-100" {...props} />
                                     ),
                                     li: ({ node, ...props }) => (
-                                        <li className="ml-4" {...props} />
+                                        <li className="ml-3 sm:ml-4" {...props} />
                                     ),
 
                                     // Tables
@@ -494,29 +494,8 @@ function Message({ message }) {
                         </motion.div>
                     )}
 
-                    {/* Metadata */}
-                    {message.metadata && !isUser && (
-                        <div className="mt-3 pt-3 border-t border-gray-700 text-xs text-gray-400">
-                            <div className="flex items-center gap-4">
-                                {message.metadata.sources_used > 0 && (
-                                    <span className="flex items-center gap-1">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                                        </svg>
-                                        {message.metadata.sources_used} sources
-                                    </span>
-                                )}
-                                {message.metadata.confidence && (
-                                    <span className="flex items-center gap-1">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        {Math.round(message.metadata.confidence * 100)}% confidence
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                    {/* Metadata - Hidden for cleaner UX */}
+                    {/* Sources and confidence removed as they appear unprofessional */}
 
                     {/* Timestamp */}
                     <div className={`mt-2 text-xs ${isUser ? 'text-cyan-200' : 'text-gray-500'}`}>

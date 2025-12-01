@@ -37,9 +37,9 @@ function MainApp() {
                 <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
                 {/* Main Content */}
-                <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-                    {/* Header */}
-                    <header className="bg-[#1e293b] border-b border-white/10 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between w-full max-w-full overflow-x-hidden">
+                <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                    {/* Header - Sticky at top */}
+                    <header className="flex-shrink-0 bg-[#1e293b] border-b border-white/10 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between w-full max-w-full overflow-x-hidden">
                         <div className="flex items-center gap-2 sm:gap-4 min-w-0">
                             <button
                                 onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -75,12 +75,12 @@ function MainApp() {
                         </div>
                     </header>
 
-                    {/* Browser Compatibility Warning */}
-                    <div className="px-3 sm:px-6 pt-3 sm:pt-4 w-full max-w-full overflow-x-hidden">
+                    {/* Browser Compatibility Warning - Sticky below header */}
+                    <div className="flex-shrink-0 px-3 sm:px-6 pt-2 sm:pt-3 w-full max-w-full overflow-x-hidden">
                         <BrowserWarning />
                     </div>
 
-                    {/* Chat Area */}
+                    {/* Chat Area - Scrollable with fixed input at bottom */}
                     <ChatContainer />
                 </div>
             </div>

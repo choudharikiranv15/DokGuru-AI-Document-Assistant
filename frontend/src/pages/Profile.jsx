@@ -29,7 +29,6 @@ export default function Profile() {
     })
 
     const [personalInfo, setPersonalInfo] = useState({
-        displayName: localStorage.getItem('display_name') || '',
         fullName: localStorage.getItem('full_name') || '',
         phoneNumber: localStorage.getItem('phone_number') || ''
     })
@@ -78,7 +77,6 @@ export default function Profile() {
     }
 
     const handleSavePersonalInfo = () => {
-        localStorage.setItem('display_name', editPersonalInfo.displayName)
         localStorage.setItem('full_name', editPersonalInfo.fullName)
         localStorage.setItem('phone_number', editPersonalInfo.phoneNumber)
         setPersonalInfo(editPersonalInfo)

@@ -1463,8 +1463,13 @@ def ask_question():
         import threading
 
         audio_id = hashlib.md5(response['answer'].encode()).hexdigest()[:12]
+
+        # Detect actual language from response text to get correct file extension
+        # (don't use 'auto' which defaults to 'en' and returns wrong extension)
+        detected_language = tts_handler.detect_language(response['answer']) if language == 'auto' else language
+
         # Get the expected file extension based on which TTS engine will be used
-        file_ext = tts_handler.get_expected_file_extension(language)
+        file_ext = tts_handler.get_expected_file_extension(detected_language)
         audio_filename = f"auto_{audio_id}{file_ext}"
         audio_url = f"/audio/{audio_filename}"
 

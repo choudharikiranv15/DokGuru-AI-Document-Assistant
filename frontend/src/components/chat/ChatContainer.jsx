@@ -195,8 +195,8 @@ export default function ChatContainer() {
                 )}
             </div>
 
-            {/* Input Area */}
-            <div className="border-t border-gray-800 bg-[#1e293b] w-full max-w-full overflow-x-hidden">
+            {/* Input Area - Sticky at bottom */}
+            <div className="flex-shrink-0 border-t border-gray-800 bg-[#1e293b] w-full max-w-full overflow-x-hidden">
                 <ChatInput setIsThinking={setIsThinking} />
             </div>
         </div>

@@ -365,12 +365,22 @@ class LLMFallbackHandler:
 
     def _get_providers_for_plan(self, plan_type: str = 'free') -> List[Dict]:
         """Get providers available for a given plan type"""
-        if plan_type in ['pro', 'premium', 'enterprise']:
-            # Pro users get all providers (pro first, then free as fallback)
-            return self.providers_by_tier['pro'] + self.providers_by_tier['free']
-        else:
-            # Free users only get free tier providers
-            return self.providers_by_tier['free']
+
+        # ===================================================================
+        # BETA MODE: Everyone gets premium LLMs to drive conversions!
+        # ===================================================================
+        # During testing phase, give ALL users access to best providers
+        # This creates amazing UX and converts users to paid plans
+        # TODO: Restore tier-based logic after paid plans launch
+        return self.providers_by_tier['pro'] + self.providers_by_tier['free']
+
+        # ORIGINAL LOGIC (restore after paid plans launch):
+        # if plan_type in ['pro', 'premium', 'enterprise']:
+        #     # Pro users get all providers (pro first, then free as fallback)
+        #     return self.providers_by_tier['pro'] + self.providers_by_tier['free']
+        # else:
+        #     # Free users only get free tier providers
+        #     return self.providers_by_tier['free']
 
     def _is_complex_query(self, question: str) -> bool:
         """Determine if query is complex (needs larger model)"""
