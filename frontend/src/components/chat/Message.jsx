@@ -136,9 +136,9 @@ function Message({ message }) {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4 sm:mb-6 px-1 sm:px-2 w-full box-border`}
+            className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4 sm:mb-6 px-1 sm:px-2 w-full max-w-full box-border overflow-hidden`}
         >
-            <div className={`flex gap-2 sm:gap-3 max-w-[calc(100%-8px)] sm:max-w-[85%] md:max-w-3xl overflow-hidden ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+            <div className={`flex gap-2 sm:gap-3 max-w-[95%] sm:max-w-[85%] md:max-w-3xl min-w-0 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
                 {/* Avatar */}
                 <motion.div
                     initial={{ scale: 0 }}
@@ -168,13 +168,13 @@ function Message({ message }) {
         `}>
                     {/* Text */}
                     {isUser ? (
-                        <div className="prose prose-sm max-w-full overflow-hidden">
-                            <p className="leading-relaxed text-white break-words">
+                        <div className="prose prose-sm max-w-full overflow-x-hidden overflow-y-auto">
+                            <p className="leading-relaxed text-white break-words overflow-wrap-anywhere">
                                 {message.text}
                             </p>
                         </div>
                     ) : (
-                        <div className="markdown-content overflow-hidden break-words">
+                        <div className="markdown-content overflow-x-hidden overflow-y-auto break-words max-w-full">
                             {/* Streaming indicator */}
                             {message.streaming && (
                                 <div className="flex items-center gap-2 mb-2 text-cyan-400">
@@ -227,8 +227,8 @@ function Message({ message }) {
 
                                     // Tables
                                     table: ({ node, ...props }) => (
-                                        <div className="overflow-x-auto mb-4 rounded-lg">
-                                            <table className="min-w-full divide-y divide-gray-700" {...props} />
+                                        <div className="overflow-x-auto mb-4 rounded-lg max-w-full -mx-1 sm:mx-0 scrollbar-thin scrollbar-thumb-cyan-500/20 scrollbar-track-transparent">
+                                            <table className="min-w-full divide-y divide-gray-700 text-xs sm:text-sm" {...props} />
                                         </div>
                                     ),
                                     thead: ({ node, ...props }) => (
@@ -250,12 +250,12 @@ function Message({ message }) {
                                     // Code
                                     code: ({ node, inline, ...props }) =>
                                         inline ? (
-                                            <code className="bg-gray-800 text-pink-400 px-1.5 py-0.5 rounded text-sm font-mono break-all" {...props} />
+                                            <code className="bg-gray-800 text-pink-400 px-1.5 py-0.5 rounded text-sm font-mono break-all max-w-full" {...props} />
                                         ) : (
-                                            <code className="block bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono mb-3 whitespace-pre-wrap break-words" {...props} />
+                                            <code className="block bg-gray-900 text-gray-100 p-2 sm:p-4 rounded-lg overflow-x-auto text-xs sm:text-sm font-mono mb-3 whitespace-pre max-w-full scrollbar-thin scrollbar-thumb-cyan-500/20 scrollbar-track-transparent" {...props} />
                                         ),
                                     pre: ({ node, ...props }) => (
-                                        <pre className="bg-gray-900 rounded-lg overflow-x-auto mb-3 max-w-full" {...props} />
+                                        <pre className="bg-gray-900 rounded-lg overflow-x-auto mb-3 max-w-full scrollbar-thin scrollbar-thumb-cyan-500/20 scrollbar-track-transparent" {...props} />
                                     ),
 
                                     // Strong/Bold

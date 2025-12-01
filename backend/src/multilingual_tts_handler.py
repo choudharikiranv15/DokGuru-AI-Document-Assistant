@@ -161,6 +161,33 @@ class MultilingualTTSHandler:
             logger.warning(f"Language detection failed: {e}. Defaulting to English")
             return 'en'
 
+    def get_expected_file_extension(self, language: str = 'auto') -> str:
+        """
+        Get the expected file extension for the TTS engine that will be used.
+
+        Args:
+            language: Language code ('en', 'hi', 'kn', 'auto' for auto-detection)
+
+        Returns:
+            File extension ('.wav' or '.mp3') based on which TTS engine will be used
+        """
+        # Auto-detect language if requested
+        if language == 'auto':
+            language = 'en'  # Default to English for extension determination
+
+        # Determine which TTS engine will be used based on language and availability
+        # This logic mirrors the synthesize() method's engine selection
+
+        # Piper TTS (WAV format) - for English and Hindi if available
+        if language in self.piper_languages and self.piper_available:
+            return '.wav'
+
+        # All other engines use MP3 format:
+        # - Google Cloud TTS: .mp3
+        # - EdgeTTS: .mp3
+        # - gTTS: .mp3
+        return '.mp3'
+
     def synthesize(self, text: str, language: str = 'auto', output_filename: Optional[str] = None,
                    engine_preference: str = 'auto') -> Dict[str, Any]:
         """
