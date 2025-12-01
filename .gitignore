@@ -28,6 +28,7 @@ frontend/build/
 /data/
 !data/pdfs/  # Allow the folder, but not its contents
 !data/processed/
+backend/data/  # Ignore backend runtime data (audio cache, chroma_db, etc.)
 *.sqlite3
 
 # Model files
