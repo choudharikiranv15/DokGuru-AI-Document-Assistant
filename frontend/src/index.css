@@ -43,11 +43,19 @@ body {
   word-wrap: break-word;
   overflow-wrap: anywhere;
   word-break: break-word;
+  max-width: 100%;
 }
 
 .markdown-content pre {
   max-width: 100%;
   overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.markdown-content code {
+  max-width: 100%;
+  word-break: break-all;
 }
 
 .markdown-content table {
@@ -56,7 +64,27 @@ body {
   overflow-x: auto;
 }
 
+.markdown-content p,
+.markdown-content li,
+.markdown-content span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .overflow-wrap-anywhere {
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Prevent horizontal scroll on mobile */
+@media (max-width: 640px) {
+  .markdown-content pre {
+    font-size: 12px;
+    padding: 8px;
+  }
+
+  .markdown-content code {
+    font-size: 11px;
+  }
 }

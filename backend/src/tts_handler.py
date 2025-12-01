@@ -143,16 +143,22 @@ class PiperTTSHandler:
 
             # Check cache
             if os.path.exists(output_path):
-                logger.info(f"Using cached Piper audio: {output_filename}.wav")
-                duration = self._get_audio_duration(output_path)
-                return {
-                    'audio_path': output_path,
-                    'duration': duration,
-                    'text': text,
-                    'filename': f"{output_filename}.wav",
-                    'language': language,
-                    'engine': 'Piper TTS (cached)'
-                }
+                file_size = os.path.getsize(output_path)
+                if file_size > 100:  # Ensure cached file is valid
+                    logger.info(f"Using cached Piper audio: {output_filename}.wav ({file_size} bytes)")
+                    duration = self._get_audio_duration(output_path, text)
+                    return {
+                        'audio_path': output_path,
+                        'duration': duration,
+                        'text': text,
+                        'filename': f"{output_filename}.wav",
+                        'language': language,
+                        'engine': 'Piper TTS (cached)'
+                    }
+                else:
+                    # Remove corrupted cache file
+                    logger.warning(f"Removing corrupted cached file: {output_path}")
+                    os.remove(output_path)
 
             # Get voice object for language
             voice = self._voice_objects[language]
@@ -163,8 +169,18 @@ class PiperTTSHandler:
             with wave.open(output_path, 'wb') as wav_file:
                 voice.synthesize_wav(text, wav_file)
 
-            # Get duration
-            duration = self._get_audio_duration(output_path)
+            # Verify file was created with content
+            if not os.path.exists(output_path):
+                raise Exception("Piper failed to create audio file")
+
+            file_size = os.path.getsize(output_path)
+            if file_size < 100:
+                raise Exception(f"Piper generated invalid audio ({file_size} bytes)")
+
+            logger.info(f"Piper audio file created: {output_path}, size: {file_size} bytes")
+
+            # Get duration with text fallback
+            duration = self._get_audio_duration(output_path, text)
 
             result = {
                 'audio_path': output_path,
@@ -183,16 +199,36 @@ class PiperTTSHandler:
             logger.error(f"Piper TTS error: {e}")
             raise Exception(f"Failed to synthesize with Piper: {str(e)}")
 
-    def _get_audio_duration(self, audio_path: str) -> float:
-        """Get duration of WAV audio file in seconds."""
+    def _get_audio_duration(self, audio_path: str, text: str = None) -> float:
+        """Get duration of WAV audio file in seconds with fallbacks."""
+        # Try reading WAV metadata
         try:
             with wave.open(audio_path, 'r') as wav_file:
                 frames = wav_file.getnframes()
                 rate = wav_file.getframerate()
-                return frames / float(rate)
+                duration = frames / float(rate)
+                if duration > 0:
+                    return duration
         except Exception as e:
-            logger.warning(f"Could not get audio duration: {e}")
-            return 0.0
+            logger.warning(f"Could not get WAV duration: {e}")
+
+        # Fallback: File size based estimation (WAV at 22050Hz, 16-bit mono = ~44100 bytes/sec)
+        try:
+            file_size = os.path.getsize(audio_path)
+            if file_size > 44:  # Skip WAV header
+                estimated = (file_size - 44) / 44100
+                if estimated > 0.5:
+                    return estimated
+        except Exception:
+            pass
+
+        # Last resort: Text-based estimation (150 WPM)
+        if text:
+            word_count = len(text.split())
+            return max(1.0, (word_count / 150) * 60)
+
+        # Absolute minimum
+        return 3.0
 
     def synthesize_streaming(self, text: str, language: str = 'en',
                              chunk_size: int = 8192) -> Generator[bytes, None, None]:

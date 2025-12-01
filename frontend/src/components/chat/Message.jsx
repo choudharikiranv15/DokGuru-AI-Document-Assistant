@@ -136,9 +136,9 @@ function Message({ message }) {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4 sm:mb-6 px-2 sm:px-0`}
+            className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4 sm:mb-6 px-1 sm:px-2 w-full box-border`}
         >
-            <div className={`flex gap-2 sm:gap-3 max-w-[95%] sm:max-w-[85%] md:max-w-3xl overflow-hidden ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+            <div className={`flex gap-2 sm:gap-3 max-w-[calc(100%-8px)] sm:max-w-[85%] md:max-w-3xl overflow-hidden ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
                 {/* Avatar */}
                 <motion.div
                     initial={{ scale: 0 }}

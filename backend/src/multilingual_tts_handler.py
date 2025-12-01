@@ -304,14 +304,20 @@ class MultilingualTTSHandler:
                 raise Exception("gTTS failed to create audio file")
 
             file_size = os.path.getsize(output_path)
-            if file_size < 1000:  # Less than 1KB is likely an error
-                logger.warning(f"gTTS generated very small file ({file_size} bytes), may be corrupted")
+            if file_size < 500:  # Less than 500 bytes is likely an error
+                logger.warning(f"gTTS generated very small file ({file_size} bytes), regenerating...")
+                os.remove(output_path)
+                raise Exception(f"gTTS generated invalid audio file ({file_size} bytes)")
 
-            # Get actual audio duration using mutagen
-            duration = self._get_mp3_duration(output_path) or self._estimate_duration(text, language)
+            logger.info(f"gTTS audio file created: {output_path}, size: {file_size} bytes")
 
-            # Ensure minimum duration
-            if duration < 0.5:
+            # Get actual audio duration using mutagen with text fallback
+            duration = self._get_mp3_duration(output_path, text)
+
+            # Ensure reasonable minimum duration based on text length
+            min_expected_duration = max(1.0, len(text.split()) / 200 * 60)  # 200 WPM max
+            if duration < min_expected_duration * 0.5:
+                logger.warning(f"Duration {duration:.2f}s seems too short for {len(text.split())} words, using estimate")
                 duration = self._estimate_duration(text, language)
 
             result = {
@@ -382,14 +388,36 @@ class MultilingualTTSHandler:
             logger.error(f"pyttsx3 fallback failed: {e}")
             raise Exception(f"All TTS methods failed for {language}: {e}")
 
-    def _get_mp3_duration(self, audio_path: str) -> Optional[float]:
-        """Get actual MP3 duration using mutagen"""
+    def _get_mp3_duration(self, audio_path: str, text: str = None) -> float:
+        """Get actual MP3 duration using mutagen with fallbacks"""
+        # Try mutagen first
         try:
             from mutagen.mp3 import MP3
             audio = MP3(audio_path)
-            return audio.info.length
-        except:
-            return None
+            duration = audio.info.length
+            if duration and duration > 0:
+                return duration
+        except ImportError:
+            logger.debug("mutagen not installed")
+        except Exception as e:
+            logger.debug(f"mutagen failed: {e}")
+
+        # Fallback: File size based estimation (MP3 at ~128kbps)
+        try:
+            file_size = os.path.getsize(audio_path)
+            if file_size > 0:
+                estimated = file_size / 16000
+                if estimated > 0.5:
+                    return estimated
+        except Exception:
+            pass
+
+        # Last resort: Text-based estimation
+        if text:
+            return self._estimate_duration(text, 'en')
+
+        # Absolute minimum
+        return 3.0
 
     def _synthesize_with_coqui(self, text: str, output_filename: Optional[str] = None) -> Dict[str, Any]:
         """Synthesize speech using Coqui TTS (English only, fallback)"""

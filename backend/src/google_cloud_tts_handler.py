@@ -292,16 +292,22 @@ class GoogleCloudTTSHandler:
 
             # Check cache
             if os.path.exists(output_path):
-                logger.info(f"Using cached Google Cloud TTS audio: {output_filename}.mp3")
-                duration = self._get_audio_duration(output_path)
-                return {
-                    'audio_path': output_path,
-                    'duration': duration,
-                    'text': text,
-                    'filename': f"{output_filename}.mp3",
-                    'language': language,
-                    'engine': 'Google Cloud TTS (cached)'
-                }
+                file_size = os.path.getsize(output_path)
+                if file_size > 100:  # Ensure cached file is valid
+                    logger.info(f"Using cached Google Cloud TTS audio: {output_filename}.mp3 ({file_size} bytes)")
+                    duration = self._get_audio_duration(output_path, text)
+                    return {
+                        'audio_path': output_path,
+                        'duration': duration,
+                        'text': text,
+                        'filename': f"{output_filename}.mp3",
+                        'language': language,
+                        'engine': 'Google Cloud TTS (cached)'
+                    }
+                else:
+                    # Remove corrupted cache file
+                    logger.warning(f"Removing corrupted cached file: {output_path}")
+                    os.remove(output_path)
 
             # Get voice config for language (uses self.voice_map set in __init__)
             voice_config = self.voice_map.get(language, self.voice_map['en'])
@@ -337,8 +343,18 @@ class GoogleCloudTTSHandler:
             with open(output_path, 'wb') as f:
                 f.write(response.audio_content)
 
-            # Get duration
-            duration = self._get_audio_duration(output_path)
+            # Verify file was created with content
+            if not os.path.exists(output_path):
+                raise Exception("Audio file was not created")
+
+            file_size = os.path.getsize(output_path)
+            if file_size < 100:
+                raise Exception(f"Audio file too small ({file_size} bytes), likely corrupted")
+
+            logger.info(f"Audio file created: {output_path}, size: {file_size} bytes")
+
+            # Get duration with text fallback
+            duration = self._get_audio_duration(output_path, text)
 
             # Determine voice type for logging
             voice_type = "Neural2" if "Neural2" in voice_config['name'] else "Standard"
@@ -361,20 +377,36 @@ class GoogleCloudTTSHandler:
             logger.error(f"Google Cloud TTS error: {e}")
             raise Exception(f"Failed to synthesize with Google Cloud TTS: {str(e)}")
 
-    def _get_audio_duration(self, audio_path: str) -> float:
+    def _get_audio_duration(self, audio_path: str, text: str = None) -> float:
         """Get duration of MP3 audio file in seconds"""
         try:
             from mutagen.mp3 import MP3
             audio = MP3(audio_path)
-            return audio.info.length
+            duration = audio.info.length
+            if duration and duration > 0:
+                return duration
         except ImportError:
             logger.warning("mutagen not installed. Using estimated duration.")
-            # Estimate based on file size
-            file_size = os.path.getsize(audio_path)
-            return file_size / 16000  # Rough estimate
         except Exception as e:
-            logger.warning(f"Could not get audio duration: {e}")
-            return 0.0
+            logger.warning(f"Could not get audio duration with mutagen: {e}")
+
+        # Fallback: Estimate based on file size (MP3 at 128kbps = 16000 bytes/sec)
+        try:
+            file_size = os.path.getsize(audio_path)
+            if file_size > 0:
+                estimated = file_size / 16000
+                if estimated > 0.5:
+                    return estimated
+        except Exception:
+            pass
+
+        # Last resort: Estimate based on text length (150 WPM average)
+        if text:
+            word_count = len(text.split())
+            return max(1.0, (word_count / 150) * 60)
+
+        # Absolute minimum fallback
+        return 3.0
 
     @staticmethod
     def get_supported_languages() -> list:
