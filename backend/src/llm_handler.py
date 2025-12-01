@@ -77,10 +77,11 @@ class LLMHandler:
                     conv_history = conversation_history
 
                 # Determine max_tokens based on query type
-                if any(keyword in query.lower() for keyword in ['summarize', 'summary', 'explain', 'describe', 'long']):
-                    max_tokens = 2000  # Long responses for summaries/explanations
+                # Higher limits to ensure responses complete properly (esp. for regional languages)
+                if any(keyword in query.lower() for keyword in ['summarize', 'summary', 'explain', 'describe', 'long', 'detail']):
+                    max_tokens = 4000  # Generous limit for detailed explanations/summaries
                 else:
-                    max_tokens = 500  # Shorter for direct questions
+                    max_tokens = 1500  # Sufficient for complete answers to direct questions
 
                 # Use fallback handler with automatic provider cascade
                 result = self.fallback_handler.query_text(
@@ -100,10 +101,11 @@ class LLMHandler:
             else:
                 # Fallback to direct Groq (legacy mode)
                 # Determine max_tokens based on query type
-                if any(keyword in query.lower() for keyword in ['summarize', 'summary', 'explain', 'describe']):
-                    max_tokens = 2000  # Long responses for summaries/explanations
+                # Higher limits to ensure responses complete properly (esp. for regional languages)
+                if any(keyword in query.lower() for keyword in ['summarize', 'summary', 'explain', 'describe', 'detail']):
+                    max_tokens = 4000  # Generous limit for detailed explanations/summaries
                 else:
-                    max_tokens = 500  # Shorter for direct questions
+                    max_tokens = 1500  # Sufficient for complete answers to direct questions
 
                 response = self.client.chat.completions.create(
                     model=self.config.LLM_MODEL,

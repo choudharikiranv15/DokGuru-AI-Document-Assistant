@@ -352,11 +352,12 @@ QUESTION: {question}
 Answer using the context above. Be concise and accurate."""
 
             # Step 3: Stream LLM response
+            # Higher token limit to ensure complete responses (esp. for regional languages)
             for chunk in self.llm_handler.fallback_handler.stream_text(
                 question=prompt,
                 conversation_history=conversation_history,
                 system_prompt=self.llm_handler._get_system_prompt(),
-                max_tokens=2000,
+                max_tokens=4000,  # Generous limit for complete explanations
                 plan_type='free'
             ):
                 yield chunk
