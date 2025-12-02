@@ -189,7 +189,7 @@ export default function About() {
                             <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-4 sm:mb-6 text-center">Created By</h2>
                             <div className="flex flex-col items-center text-center">
                                 <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-full flex items-center justify-center text-2xl sm:text-3xl font-bold mb-3 sm:mb-4 shadow-xl">
-                                    KC
+
                                 </div>
                                 {/* <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">Kiran Choudhari</h3>
                                 <p className="text-cyan-400 text-sm sm:text-base mb-3 sm:mb-4">Full Stack Developer & AI Enthusiast</p>
