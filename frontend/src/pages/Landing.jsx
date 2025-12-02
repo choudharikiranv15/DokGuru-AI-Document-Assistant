@@ -971,16 +971,16 @@ export default function Landing() {
                                     variants={fadeInUp}
                                     whileHover={{ scale: 1.05, y: -10 }}
                                     className={`relative p-5 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl border transition-all duration-300 ${plan.popular
-                                            ? 'bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-purple-500/50 shadow-2xl shadow-purple-500/20'
-                                            : 'bg-white/5 backdrop-blur-sm border-white/10 hover:border-cyan-500/30'
+                                        ? 'bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-purple-500/50 shadow-2xl shadow-purple-500/20'
+                                        : 'bg-white/5 backdrop-blur-sm border-white/10 hover:border-cyan-500/30'
                                         }`}
                                 >
                                     {plan.badge && (
                                         <div className={`absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 text-white text-sm font-semibold rounded-full ${plan.popular
-                                                ? 'bg-gradient-to-r from-purple-600 to-pink-600'
-                                                : i === 0
-                                                    ? 'bg-gradient-to-r from-cyan-600 to-blue-600'
-                                                    : 'bg-gradient-to-r from-orange-600 to-red-600'
+                                            ? 'bg-gradient-to-r from-purple-600 to-pink-600'
+                                            : i === 0
+                                                ? 'bg-gradient-to-r from-cyan-600 to-blue-600'
+                                                : 'bg-gradient-to-r from-orange-600 to-red-600'
                                             }`}>
                                             {plan.badge}
                                         </div>
@@ -1005,10 +1005,10 @@ export default function Landing() {
                                     <Link
                                         to={plan.link}
                                         className={`block text-center px-6 py-3 rounded-xl font-semibold transition-all duration-200 ${plan.popular
-                                                ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg shadow-purple-500/50'
-                                                : i === 0
-                                                    ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white shadow-lg shadow-cyan-500/50'
-                                                    : 'bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white shadow-lg shadow-orange-500/50'
+                                            ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg shadow-purple-500/50'
+                                            : i === 0
+                                                ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white shadow-lg shadow-cyan-500/50'
+                                                : 'bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white shadow-lg shadow-orange-500/50'
                                             }`}
                                     >
                                         {plan.cta}
@@ -1257,14 +1257,14 @@ export default function Landing() {
                                 <p className="text-sm text-gray-400">
                                     Crafted with{' '}
                                     <span className="text-red-500 animate-pulse">❤️</span>
-                                    {' '}by{' '}
+                                    {/* {' '}by{' '} */}
                                     <a
-                                        href="https://www.linkedin.com/in/kiranchoudhari-1510m"
+                                        href=""
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-600 hover:from-cyan-300 hover:to-purple-500 font-semibold transition-all"
                                     >
-                                        Kiran Choudhari
+                                        {/* Kiran Choudhari */}
                                     </a>
                                 </p>
                             </div>
