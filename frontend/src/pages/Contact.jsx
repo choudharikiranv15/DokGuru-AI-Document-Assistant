@@ -104,7 +104,7 @@ export default function Contact() {
                     </div>
 
                     {/* Social Links */}
-                    <div className="mb-8 sm:mb-12">
+                    {/* <div className="mb-8 sm:mb-12">
                         <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-center">Connect With Us</h2>
                         <div className="flex justify-center gap-4">
                             <a
@@ -130,7 +130,7 @@ export default function Contact() {
                                 </svg>
                             </a>
                         </div>
-                    </div>
+                    </div> */}
 
                     {/* FAQ Section */}
                     <div className="bg-white/5 border border-white/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 md:p-8">

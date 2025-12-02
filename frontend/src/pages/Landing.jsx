@@ -1095,7 +1095,7 @@ export default function Landing() {
                                 </div>
 
                                 {/* Social Links */}
-                                <div>
+                                {/* <div>
                                     <h4 className="text-white text-sm font-semibold mb-3">Connect With Us</h4>
                                     <div className="flex gap-3">
                                         <a
@@ -1130,7 +1130,7 @@ export default function Landing() {
                                             </svg>
                                         </a>
                                     </div>
-                                </div>
+                                </div> */}
                             </div>
 
                             {/* Product */}
