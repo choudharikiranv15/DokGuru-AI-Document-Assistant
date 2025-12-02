@@ -75,7 +75,7 @@ export default function Contact() {
                         </motion.a>
 
                         {/* GitHub Issues */}
-                        <motion.a
+                        {/* <motion.a
                             href="https://github.com/choudharikiranv15/DocuMind-Voice-QA-System/issues"
                             target="_blank"
                             rel="noopener noreferrer"
@@ -100,7 +100,7 @@ export default function Contact() {
                                     </p>
                                 </div>
                             </div>
-                        </motion.a>
+                        </motion.a> */}
                     </div>
 
                     {/* Social Links */}

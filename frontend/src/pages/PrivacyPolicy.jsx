@@ -10,7 +10,7 @@ export default function PrivacyPolicy() {
                     <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
                         <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-xl flex items-center justify-center">
                             <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8 0-1.48.41-2.86 1.12-4.06l10.94 10.94C14.86 19.59 13.48 20 12 20zm6.88-3.94L8.94 6.12C10.14 5.41 11.52 5 13 5c4.41 0 8 3.59 8 8 0 1.48-.41 2.86-1.12 4.06z"/>
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8 0-1.48.41-2.86 1.12-4.06l10.94 10.94C14.86 19.59 13.48 20 12 20zm6.88-3.94L8.94 6.12C10.14 5.41 11.52 5 13 5c4.41 0 8 3.59 8 8 0 1.48-.41 2.86-1.12 4.06z" />
                             </svg>
                         </div>
                         <span className="text-xl font-bold">
@@ -231,11 +231,11 @@ export default function PrivacyPolicy() {
                             <p className="mb-3 sm:mb-4 text-sm sm:text-base">
                                 If you have questions about this Privacy Policy or want to exercise your rights, contact us:
                             </p>
-                            <ul className="space-y-1.5 sm:space-y-2 text-sm sm:text-base">
+                            {/* <ul className="space-y-1.5 sm:space-y-2 text-sm sm:text-base">
                                 <li>📧 Email: <a href="mailto:contact@dokguru.com" className="text-cyan-400 hover:text-cyan-300">contact@dokguru.com</a></li>
                                 <li>🐛 GitHub Issues: <a href="https://github.com/choudharikiranv15/DocuMind-Voice-QA-System/issues" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300">Report on GitHub</a></li>
                                 <li>👤 Developer: <a href="https://www.linkedin.com/in/kiranchoudhari-1510m" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300">Kiran Choudhari on LinkedIn</a></li>
-                            </ul>
+                            </ul> */}
                         </section>
 
                         {/* Summary */}

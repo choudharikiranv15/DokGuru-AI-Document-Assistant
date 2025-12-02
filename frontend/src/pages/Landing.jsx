@@ -1186,12 +1186,12 @@ export default function Landing() {
                                             <span>API Status</span>
                                         </a>
                                     </li>
-                                    <li>
+                                    {/* <li>
                                         <a href="https://github.com/choudharikiranv15/DocuMind-Voice-QA-System/issues" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-cyan-400 transition-colors text-sm flex items-center gap-2 group">
                                             <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
                                             <span>Support</span>
                                         </a>
-                                    </li>
+                                    </li> */}
                                     <li>
                                         <Link to="/contact#faq" className="text-gray-400 hover:text-cyan-400 transition-colors text-sm flex items-center gap-2 group">
                                             <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
