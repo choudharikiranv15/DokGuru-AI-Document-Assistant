@@ -136,16 +136,9 @@ jobs:
             --update-env-vars "REDIS_URL=${{ secrets.REDIS_URL }}" \
             --update-env-vars "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" \
             --update-env-vars "POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }}" \
-            --update-env-vars "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}"
-
-      - name: Update CORS configuration
-        run: |
-          # CRITICAL: Don't add CORS_ORIGINS to avoid gcloud parsing issues
-          # You added it manually via GCP Console and it works there
-          # The deployment pipeline should NOT touch CORS/FRONTEND_URL
-          # to prevent overwriting your manual configuration
-          echo "⚠️  CORS_ORIGINS managed manually via GCP Console"
-          echo "✓ Deployment complete - manual CORS config preserved"
+            --update-env-vars "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" \
+            --update-env-vars FRONTEND_URL="${{ secrets.FRONTEND_URL }}" \
+            --update-env-vars CORS_ORIGINS="${{ secrets.CORS_ORIGINS }}"
 
       - name: Set Google Cloud TTS credentials
         run: |
