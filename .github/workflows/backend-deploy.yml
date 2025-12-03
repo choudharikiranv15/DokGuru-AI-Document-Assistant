@@ -140,21 +140,12 @@ jobs:
 
       - name: Update CORS configuration
         run: |
-          # Update CORS and FRONTEND_URL separately using env file to avoid parsing issues
-          # Create temporary env vars file with proper escaping
-          cat > /tmp/env-vars.yaml <<EOF
-          FRONTEND_URL: "https://dokguru.in"
-          CORS_ORIGINS: "https://dokguru.in,https://www.dokguru.in,https://dokguru.vercel.app"
-          EOF
-
-          # Update service with env file (preserves all existing env vars)
-          gcloud run services update ${{ env.SERVICE }} \
-            --region ${{ env.REGION }} \
-            --project ${{ env.PROJECT_ID }} \
-            --env-vars-file /tmp/env-vars.yaml
-
-          # Cleanup
-          rm /tmp/env-vars.yaml
+          # CRITICAL: Don't add CORS_ORIGINS to avoid gcloud parsing issues
+          # You added it manually via GCP Console and it works there
+          # The deployment pipeline should NOT touch CORS/FRONTEND_URL
+          # to prevent overwriting your manual configuration
+          echo "⚠️  CORS_ORIGINS managed manually via GCP Console"
+          echo "✓ Deployment complete - manual CORS config preserved"
 
       - name: Set Google Cloud TTS credentials
         run: |
