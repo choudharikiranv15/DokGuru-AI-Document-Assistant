@@ -210,14 +210,27 @@ class SupabaseVectorStore:
                 if isinstance(document_filter, list):
                     # Multiple documents - pass as array
                     params['match_documents'] = document_filter
+                    self.logger.info(f"Searching in documents: {document_filter}")
                 else:
                     # Single document - convert to array for consistency
                     params['match_documents'] = [document_filter]
+                    self.logger.info(f"Searching in document: {document_filter}")
+            else:
+                self.logger.info(f"Searching across all documents for user: {user_id or 'anonymous'}")
 
             # Use match_documents RPC function
+            self.logger.debug(f"RPC params: user_id={params['match_user_id']}, count={params['match_count']}")
             result = self.client.rpc('match_documents', params).execute()
 
             if not result.data:
+                self.logger.warning(f"No results found for query: '{query[:50]}...' (user: {user_id or 'anonymous'})")
+                # Check if user has any documents
+                doc_check = self.client.table(self.table_name).select('document_name').eq('user_id', user_id or 'anonymous').limit(1).execute()
+                if not doc_check.data:
+                    self.logger.error(f"User {user_id or 'anonymous'} has NO documents in database!")
+                else:
+                    self.logger.info(f"User has documents, but none matched the query")
+
                 # Return empty results in ChromaDB format
                 return {
                     'documents': [[]],
@@ -244,6 +257,8 @@ class SupabaseVectorStore:
                 similarity = row.get('similarity', 0)
                 distances.append(1 - similarity)
 
+            self.logger.info(f"Found {len(documents)} results for query: '{query[:50]}...'")
+
             # Return in ChromaDB nested format for compatibility
             return {
                 'documents': [documents],
@@ -252,7 +267,7 @@ class SupabaseVectorStore:
             }
 
         except Exception as e:
-            self.logger.error(f"Search failed: {e}")
+            self.logger.error(f"Search failed: {e}", exc_info=True)
             # Fallback to basic text search if vector search fails
             return self._fallback_search(query, user_id, n_results, document_filter)
 
@@ -264,6 +279,7 @@ class SupabaseVectorStore:
             document_filter: Single document name (str) or list of document names ([str])
         """
         try:
+            self.logger.info(f"Using fallback text search for query: '{query[:50]}...'")
             query_builder = self.client.table(self.table_name).select('*').eq('user_id', user_id or 'anonymous')
 
             # Handle both single document and multiple documents
@@ -281,6 +297,7 @@ class SupabaseVectorStore:
             result = query_builder.execute()
 
             if not result.data:
+                self.logger.warning(f"Fallback search found no results for query: '{query[:50]}...'")
                 return {
                     'documents': [[]],
                     'metadatas': [[]],

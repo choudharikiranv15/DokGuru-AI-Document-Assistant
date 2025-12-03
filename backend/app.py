@@ -288,20 +288,17 @@ except Exception as e:
 try:
     redis_url = os.getenv('REDIS_URL')  # Redis Cloud: redis://user:pass@host:port
     storage_uri = redis_url if redis_url else "memory://"
-    
-    # Add connection pooling and retry settings for Redis
+
+    # Simplified connection options for Cloud Run compatibility
+    # Removed socket_keepalive_options which cause "Invalid argument" errors
     storage_options = {}
     if redis_url:
         storage_options = {
             "socket_connect_timeout": 5,
-            "socket_keepalive": True,
-            "socket_keepalive_options": {
-                1: 1,  # TCP_KEEPIDLE
-                2: 1,  # TCP_KEEPINTVL
-                3: 3   # TCP_KEEPCNT
-            },
+            "socket_timeout": 3,
             "retry_on_timeout": True,
-            "health_check_interval": 30
+            "max_connections": 10,
+            "decode_responses": False
         }
 
     limiter = Limiter(
@@ -316,6 +313,7 @@ try:
     logger.info(f"✓ Rate limiter initialized with {storage_uri}")
 except Exception as e:
     logger.warning(f"Rate limiter initialization failed (non-critical): {e}")
+    logger.warning("Falling back to in-memory rate limiting (resets on restart)")
     # Create a dummy limiter that does nothing
     class DummyLimiter:
         def limit(self, *args, **kwargs):
