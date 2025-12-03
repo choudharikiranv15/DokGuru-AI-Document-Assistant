@@ -137,8 +137,8 @@ jobs:
             --update-env-vars "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" \
             --update-env-vars "POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }}" \
             --update-env-vars "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" \
-            --update-env-vars FRONTEND_URL="${{ secrets.FRONTEND_URL }}" \
-            --update-env-vars CORS_ORIGINS="${{ secrets.CORS_ORIGINS }}"
+            --update-env-vars "FRONTEND_URL=${{ secrets.FRONTEND_URL }}" \
+            --update-env-vars "CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}"
 
       - name: Set Google Cloud TTS credentials
         run: |
