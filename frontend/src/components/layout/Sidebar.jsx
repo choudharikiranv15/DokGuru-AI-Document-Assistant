@@ -1,8 +1,17 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import DocumentUpload from '../documents/DocumentUpload'
 import DocumentList from '../documents/DocumentList'
+import TabToggle from '../sidebar/TabToggle'
+import ChatHistoryList from '../chatHistory/ChatHistoryList'
+import { useDocumentStore } from '../../stores/documentStore'
+import { useChatHistoryStore } from '../../stores/chatHistoryStore'
 
 export default function Sidebar({ isOpen, onClose }) {
+    const [activeTab, setActiveTab] = useState('documents') // 'documents' or 'history'
+    const documents = useDocumentStore(state => state.documents)
+    const chatHistories = useChatHistoryStore(state => state.chatHistories)
+
     return (
         <>
             {/* Mobile overlay */}
@@ -35,7 +44,9 @@ export default function Sidebar({ isOpen, onClose }) {
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                     </svg>
                                 </div>
-                                <h2 className="text-base font-semibold text-white">My Documents</h2>
+                                <h2 className="text-base font-semibold text-white">
+                                    {activeTab === 'documents' ? 'My Documents' : 'Chat History'}
+                                </h2>
                             </div>
                             <motion.button
                                 whileHover={{ scale: 1.1 }}
@@ -49,13 +60,43 @@ export default function Sidebar({ isOpen, onClose }) {
                             </motion.button>
                         </div>
 
-                        {/* Upload Component */}
-                        <DocumentUpload />
+                        {/* Tab Toggle */}
+                        <TabToggle
+                            activeTab={activeTab}
+                            onTabChange={setActiveTab}
+                            documentCount={documents.length}
+                            chatCount={chatHistories.length}
+                        />
                     </div>
 
-                    {/* Document List */}
+                    {/* Tab Content */}
                     <div className="flex-1 overflow-y-auto p-3">
-                        <DocumentList />
+                        {activeTab === 'documents' ? (
+                            <motion.div
+                                key="documents"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                transition={{ duration: 0.2 }}
+                                className="space-y-4"
+                            >
+                                {/* Upload Component */}
+                                <DocumentUpload />
+
+                                {/* Document List */}
+                                <DocumentList />
+                            </motion.div>
+                        ) : (
+                            <motion.div
+                                key="history"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                transition={{ duration: 0.2 }}
+                            >
+                                <ChatHistoryList />
+                            </motion.div>
+                        )}
                     </div>
 
                     {/* Sidebar Footer */}

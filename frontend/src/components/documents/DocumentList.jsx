@@ -6,10 +6,12 @@ import DocumentCard from './DocumentCard'
 
 export default function DocumentList() {
     const documents = useDocumentStore(state => state.documents)
+    const activeDocuments = useDocumentStore(state => state.activeDocuments)
     const fetchDocuments = useDocumentStore(state => state.fetchDocuments)
     const clearDocuments = useDocumentStore(state => state.clearDocuments)
+    const selectAllDocuments = useDocumentStore(state => state.selectAllDocuments)
+    const deselectAllDocuments = useDocumentStore(state => state.deselectAllDocuments)
     const loading = useDocumentStore(state => state.loading)
-    const currentDocument = useDocumentStore(state => state.currentDocument)
 
     useEffect(() => {
         fetchDocuments()
@@ -62,25 +64,47 @@ export default function DocumentList() {
         )
     }
 
+    const allSelected = documents.length > 0 && activeDocuments.length === documents.length
+
     return (
-        <div className="space-y-2">
+        <div className="space-y-2 sm:space-y-3">
+            {/* Header with active count */}
             <div className="flex items-center justify-between px-1">
-                <h3 className="text-xs font-medium text-gray-400">
-                    Documents ({documents.length})
+                <h3 className="text-xs sm:text-sm font-medium text-gray-300">
+                    <span className="text-gray-400">Documents</span>
+                    {activeDocuments.length > 0 && (
+                        <span className="ml-2 px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded text-[10px] sm:text-xs">
+                            {activeDocuments.length} active
+                        </span>
+                    )}
                 </h3>
-                {documents.length > 0 && (
+            </div>
+
+            {/* Selection controls */}
+            {documents.length > 0 && (
+                <div className="flex items-center gap-2 px-1">
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={allSelected ? deselectAllDocuments : selectAllDocuments}
+                        className="flex-1 text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 sm:py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-gray-300 hover:text-white transition-all"
+                    >
+                        {allSelected ? '✓ Deselect All' : 'Select All'}
+                    </motion.button>
                     <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={handleClearAll}
-                        className="text-[10px] text-red-400 hover:text-red-300 transition-colors"
+                        className="text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 sm:py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all"
+                        title="Delete all documents"
                     >
                         Clear All
                     </motion.button>
-                )}
-            </div>
+                </div>
+            )}
 
-            <div className="space-y-1.5">
+            {/* Document list */}
+            <div className="space-y-1.5 sm:space-y-2">
                 {documents.map((doc, index) => (
                     <DocumentCard key={doc.name || index} document={doc} />
                 ))}

@@ -19,6 +19,7 @@ export default function AdminDashboard() {
     const [aiFeedbackAnalytics, setAiFeedbackAnalytics] = useState(null)
     const navigate = useNavigate()
     const user = useAuthStore(state => state.user)
+    const token = useAuthStore(state => state.token)
 
     // Check if user is admin
     useEffect(() => {
@@ -40,7 +41,7 @@ export default function AdminDashboard() {
         try {
             const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/admin/dashboard`, {
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${token}`
                 }
             })
             const data = await response.json()
@@ -59,7 +60,7 @@ export default function AdminDashboard() {
         try {
             const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/admin/users`, {
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${token}`
                 }
             })
             const data = await response.json()
@@ -75,7 +76,7 @@ export default function AdminDashboard() {
         try {
             const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/admin/feedback`, {
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${token}`
                 }
             })
             const data = await response.json()
@@ -91,7 +92,7 @@ export default function AdminDashboard() {
         try {
             const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/admin/ai-feedback`, {
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${token}`
                 }
             })
             const data = await response.json()
@@ -157,11 +158,10 @@ export default function AdminDashboard() {
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`px-6 py-3 font-medium transition-all relative ${
-                                    activeTab === tab.id
-                                        ? 'text-white'
-                                        : 'text-gray-400 hover:text-white'
-                                }`}
+                                className={`px-6 py-3 font-medium transition-all relative ${activeTab === tab.id
+                                    ? 'text-white'
+                                    : 'text-gray-400 hover:text-white'
+                                    }`}
                             >
                                 {tab.label}
                                 {activeTab === tab.id && (
@@ -304,8 +304,8 @@ function OverviewTab({ data, aiAnalytics }) {
                             <BarChart data={feedbackRatingData}>
                                 <defs>
                                     <linearGradient id="colorRating" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/>
-                                        <stop offset="95%" stopColor="#eab308" stopOpacity={0.3}/>
+                                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8} />
+                                        <stop offset="95%" stopColor="#eab308" stopOpacity={0.3} />
                                     </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -365,8 +365,8 @@ function OverviewTab({ data, aiAnalytics }) {
                         ]}>
                             <defs>
                                 <linearGradient id="colorMetric" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
-                                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8} />
+                                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
                                 </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -385,11 +385,43 @@ function OverviewTab({ data, aiAnalytics }) {
 // Users Tab Component
 function UsersTab({ users }) {
     const [searchTerm, setSearchTerm] = useState('')
+    const [selectedUser, setSelectedUser] = useState(null)
+    const [userDetails, setUserDetails] = useState(null)
+    const [loadingDetails, setLoadingDetails] = useState(false)
+    const token = useAuthStore(state => state.token)
 
     const filteredUsers = users.filter(user =>
         user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.role?.toLowerCase().includes(searchTerm.toLowerCase())
     )
+
+    const fetchUserDetails = async (userId) => {
+        setLoadingDetails(true)
+        try {
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/admin/users/${userId}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            const data = await response.json()
+            console.log('User details response:', data)
+            if (data.success) {
+                setUserDetails(data)
+            } else {
+                toast.error(data.message || 'Failed to load user details')
+            }
+        } catch (error) {
+            console.error('Error fetching user details:', error)
+            toast.error('Failed to load user details')
+        } finally {
+            setLoadingDetails(false)
+        }
+    }
+
+    const handleViewDetails = (user) => {
+        setSelectedUser(user)
+        fetchUserDetails(user.id)
+    }
 
     return (
         <div className="space-y-6">
@@ -423,6 +455,7 @@ function UsersTab({ users }) {
                                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Institution</th>
                                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Joined</th>
                                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Admin</th>
+                                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/10">
@@ -454,13 +487,211 @@ function UsersTab({ users }) {
                                             <span className="text-gray-500 text-sm">User</span>
                                         )}
                                     </td>
+                                    <td className="px-6 py-4">
+                                        <button
+                                            onClick={() => handleViewDetails(user)}
+                                            className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white rounded-lg text-sm font-medium transition-all"
+                                        >
+                                            View Details
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
             </div>
+
+            {/* User Details Modal */}
+            {selectedUser && (
+                <UserDetailsModal
+                    user={selectedUser}
+                    details={userDetails}
+                    loading={loadingDetails}
+                    onClose={() => {
+                        setSelectedUser(null)
+                        setUserDetails(null)
+                    }}
+                />
+            )}
         </div>
+    )
+}
+
+// User Details Modal Component
+function UserDetailsModal({ user, details, loading, onClose }) {
+    return (
+        <>
+            {/* Backdrop */}
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={onClose}
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            />
+
+            {/* Modal */}
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            >
+                <div className="bg-[#1e293b] rounded-3xl shadow-2xl border border-white/10 w-full max-w-4xl max-h-[90vh] overflow-hidden">
+                    {/* Header */}
+                    <div className="bg-gradient-to-r from-purple-600/20 to-pink-600/20 border-b border-white/10 px-6 py-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-2xl font-bold text-white">
+                                    {user.email?.[0]?.toUpperCase()}
+                                </div>
+                                <div>
+                                    <h2 className="text-2xl font-bold text-white">{user.email}</h2>
+                                    <p className="text-sm text-gray-400">User Details & Activity</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={onClose}
+                                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                            >
+                                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Content */}
+                    <div className="overflow-y-auto max-h-[calc(90vh-120px)] p-6">
+                        {loading ? (
+                            <div className="flex items-center justify-center py-12">
+                                <div className="animate-spin w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full"></div>
+                            </div>
+                        ) : details ? (
+                            <div className="space-y-6">
+                                {/* Basic Info */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                                        <div className="text-sm text-gray-400 mb-1">Role</div>
+                                        <div className="text-white font-semibold">{details.user?.role || 'N/A'}</div>
+                                    </div>
+                                    <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                                        <div className="text-sm text-gray-400 mb-1">Institution</div>
+                                        <div className="text-white font-semibold">{details.user?.institution || 'N/A'}</div>
+                                    </div>
+                                    <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                                        <div className="text-sm text-gray-400 mb-1">Occupation</div>
+                                        <div className="text-white font-semibold">{details.user?.occupation || 'N/A'}</div>
+                                    </div>
+                                    <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                                        <div className="text-sm text-gray-400 mb-1">Joined</div>
+                                        <div className="text-white font-semibold">
+                                            {details.user?.created_at ?
+                                                new Date(details.user.created_at).toLocaleDateString('en-US', {
+                                                    month: 'long', day: 'numeric', year: 'numeric'
+                                                }) : 'N/A'
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Stats */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div className="bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/30 rounded-xl p-4">
+                                        <div className="text-3xl mb-2">📄</div>
+                                        <div className="text-2xl font-bold text-white">{details.stats?.document_count || 0}</div>
+                                        <div className="text-sm text-gray-400">Documents</div>
+                                    </div>
+                                    <div className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl p-4">
+                                        <div className="text-3xl mb-2">💬</div>
+                                        <div className="text-2xl font-bold text-white">{details.stats?.query_count || 0}</div>
+                                        <div className="text-sm text-gray-400">Queries</div>
+                                    </div>
+                                    <div className="bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30 rounded-xl p-4">
+                                        <div className="text-3xl mb-2">⭐</div>
+                                        <div className="text-2xl font-bold text-white">{details.stats?.feedback_count || 0}</div>
+                                        <div className="text-sm text-gray-400">Feedback</div>
+                                    </div>
+                                    <div className="bg-gradient-to-br from-orange-500/20 to-red-500/20 border border-orange-500/30 rounded-xl p-4">
+                                        <div className="text-3xl mb-2">🔥</div>
+                                        <div className="text-lg font-bold text-white leading-tight">
+                                            {details.stats?.last_active || 'Never'}
+                                        </div>
+                                        <div className="text-sm text-gray-400">Last Active</div>
+                                    </div>
+                                </div>
+
+                                {/* Documents */}
+                                <div>
+                                    <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                                        <span>📚</span> Documents ({details.documents?.length || 0})
+                                    </h3>
+                                    {details.documents && details.documents.length > 0 ? (
+                                        <div className="space-y-2">
+                                            {details.documents.slice(0, 5).map((doc) => (
+                                                <div key={doc.id} className="bg-white/5 border border-white/10 rounded-lg p-3 flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                                                            <span className="text-xl">📄</span>
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-white font-medium">{doc.filename}</div>
+                                                            <div className="text-xs text-gray-400">
+                                                                {doc.created_at ? new Date(doc.created_at).toLocaleDateString() : 'N/A'}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-sm text-gray-400">{doc.file_size || 'N/A'}</div>
+                                                </div>
+                                            ))}
+                                            {details.documents.length > 5 && (
+                                                <div className="text-center text-sm text-gray-400 py-2">
+                                                    +{details.documents.length - 5} more documents
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="bg-white/5 border border-white/10 rounded-lg p-6 text-center">
+                                            <div className="text-4xl mb-2">📭</div>
+                                            <p className="text-gray-400 text-sm">No documents uploaded yet</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Recent Activity */}
+                                <div>
+                                    <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                                        <span>🕐</span> Recent Activity
+                                    </h3>
+                                    {details.recent_queries && details.recent_queries.length > 0 ? (
+                                        <div className="space-y-2">
+                                            {details.recent_queries.slice(0, 5).map((query, idx) => (
+                                                <div key={idx} className="bg-white/5 border border-white/10 rounded-lg p-3">
+                                                    <div className="text-white text-sm mb-1">{query.query || 'Query'}</div>
+                                                    <div className="text-xs text-gray-400">
+                                                        {new Date(query.created_at).toLocaleString()}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="bg-white/5 border border-white/10 rounded-lg p-6 text-center">
+                                            <div className="text-4xl mb-2">💤</div>
+                                            <p className="text-gray-400 text-sm">No recent activity</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-center py-12 text-gray-400">
+                                Failed to load user details
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </motion.div>
+        </>
     )
 }
 
@@ -528,15 +759,14 @@ function AIResponsesTab({ feedback, analytics }) {
                     <button
                         key={rating}
                         onClick={() => setFilterRating(rating)}
-                        className={`px-4 py-2 rounded-xl font-medium whitespace-nowrap transition-all ${
-                            filterRating === rating
-                                ? 'bg-purple-500 text-white'
-                                : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                        }`}
+                        className={`px-4 py-2 rounded-xl font-medium whitespace-nowrap transition-all ${filterRating === rating
+                            ? 'bg-purple-500 text-white'
+                            : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                            }`}
                     >
                         {rating === 'all' ? 'All Responses' :
-                         rating === 'likes' ? `👍 Liked (${analytics?.likes || 0})` :
-                         `👎 Disliked (${analytics?.dislikes || 0})`}
+                            rating === 'likes' ? `👍 Liked (${analytics?.likes || 0})` :
+                                `👎 Disliked (${analytics?.dislikes || 0})`}
                     </button>
                 ))}
             </div>
@@ -552,11 +782,10 @@ function AIResponsesTab({ feedback, analytics }) {
                     >
                         {/* Rating Badge */}
                         <div className="flex items-start justify-between mb-4">
-                            <span className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                                item.rating === 1
-                                    ? 'bg-green-500/20 text-green-400 border border-green-500/50'
-                                    : 'bg-red-500/20 text-red-400 border border-red-500/50'
-                            }`}>
+                            <span className={`px-3 py-1 rounded-lg text-sm font-medium ${item.rating === 1
+                                ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+                                : 'bg-red-500/20 text-red-400 border border-red-500/50'
+                                }`}>
                                 {item.rating === 1 ? '👍 Helpful' : '👎 Not Helpful'}
                             </span>
                             <span className="text-gray-400 text-sm">
@@ -620,12 +849,21 @@ function AIResponsesTab({ feedback, analytics }) {
 // Feedback Tab Component
 function FeedbackTab({ feedback }) {
     const [filterType, setFilterType] = useState('all')
+    const [expandedId, setExpandedId] = useState(null)
 
     const filteredFeedback = filterType === 'all'
         ? feedback
         : feedback.filter(f => f.feedback_type === filterType)
 
     const types = ['all', 'bug', 'feature_request', 'improvement', 'praise', 'other']
+
+    const formatDateTime = (dateString) => {
+        const date = new Date(dateString)
+        return {
+            date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            time: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+        }
+    }
 
     return (
         <div className="space-y-6">
@@ -635,11 +873,10 @@ function FeedbackTab({ feedback }) {
                     <button
                         key={type}
                         onClick={() => setFilterType(type)}
-                        className={`px-4 py-2 rounded-xl font-medium whitespace-nowrap transition-all ${
-                            filterType === type
-                                ? 'bg-purple-500 text-white'
-                                : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                        }`}
+                        className={`px-4 py-2 rounded-xl font-medium whitespace-nowrap transition-all ${filterType === type
+                            ? 'bg-purple-500 text-white'
+                            : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                            }`}
                     >
                         {type === 'all' ? 'All' : type.replace('_', ' ').split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')}
                     </button>
@@ -648,73 +885,202 @@ function FeedbackTab({ feedback }) {
 
             {/* Feedback List */}
             <div className="space-y-4">
-                {filteredFeedback.map((item) => (
-                    <motion.div
-                        key={item.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all"
-                    >
-                        <div className="flex items-start justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                                <div className="flex items-center gap-1">
-                                    {[...Array(item.overall_rating)].map((_, i) => (
-                                        <span key={i} className="text-yellow-400">⭐</span>
-                                    ))}
+                {filteredFeedback.map((item) => {
+                    const dateTime = formatDateTime(item.created_at)
+                    const isExpanded = expandedId === item.id
+
+                    return (
+                        <motion.div
+                            key={item.id}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden hover:border-white/20 transition-all"
+                        >
+                            {/* Header */}
+                            <div className="p-6 pb-4">
+                                <div className="flex items-start justify-between mb-4">
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                        {/* Overall Rating */}
+                                        <div className="flex items-center gap-1">
+                                            {[...Array(5)].map((_, i) => (
+                                                <span key={i} className={i < item.overall_rating ? 'text-yellow-400' : 'text-gray-600'}>
+                                                    ⭐
+                                                </span>
+                                            ))}
+                                        </div>
+                                        {/* Type Badge */}
+                                        <span className={`px-3 py-1 rounded-lg text-sm font-medium ${item.feedback_type === 'bug' ? 'bg-red-500/20 text-red-400 border border-red-500/50' :
+                                            item.feedback_type === 'feature_request' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50' :
+                                                item.feedback_type === 'improvement' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50' :
+                                                    item.feedback_type === 'praise' ? 'bg-green-500/20 text-green-400 border border-green-500/50' :
+                                                        'bg-gray-500/20 text-gray-400 border border-gray-500/50'
+                                            }`}>
+                                            {item.feedback_type === 'bug' ? '🐛 Bug' :
+                                                item.feedback_type === 'feature_request' ? '💡 Feature Request' :
+                                                    item.feedback_type === 'improvement' ? '📈 Improvement' :
+                                                        item.feedback_type === 'praise' ? '❤️ Praise' : '💬 Other'}
+                                        </span>
+                                        {/* NPS Score */}
+                                        {item.nps_score !== null && (
+                                            <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${item.nps_score >= 9 ? 'bg-green-500/20 text-green-400 border border-green-500/50' :
+                                                item.nps_score >= 7 ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/50' :
+                                                    'bg-red-500/20 text-red-400 border border-red-500/50'
+                                                }`}>
+                                                NPS: {item.nps_score}/10
+                                            </span>
+                                        )}
+                                    </div>
+                                    {/* Date/Time */}
+                                    <div className="text-right">
+                                        <div className="text-gray-300 text-sm font-medium">{dateTime.date}</div>
+                                        <div className="text-gray-500 text-xs">{dateTime.time}</div>
+                                    </div>
                                 </div>
-                                <span className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                                    item.feedback_type === 'bug' ? 'bg-red-500/20 text-red-400' :
-                                    item.feedback_type === 'feature_request' ? 'bg-purple-500/20 text-purple-400' :
-                                    item.feedback_type === 'improvement' ? 'bg-blue-500/20 text-blue-400' :
-                                    item.feedback_type === 'praise' ? 'bg-green-500/20 text-green-400' :
-                                    'bg-gray-500/20 text-gray-400'
-                                }`}>
-                                    {item.feedback_type.replace('_', ' ')}
-                                </span>
+
+                                {/* User Info */}
+                                <div className="flex items-center gap-2 mb-4 text-sm">
+                                    <div className="w-6 h-6 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-full flex items-center justify-center text-xs font-bold text-white">
+                                        {item.user_email?.[0]?.toUpperCase() || 'U'}
+                                    </div>
+                                    <span className="text-gray-400">
+                                        {item.user_email || `User ID: ${item.user_id?.slice(0, 8)}...`}
+                                    </span>
+                                </div>
+
+                                {/* Title */}
+                                {item.feedback_title && (
+                                    <h4 className="text-white font-semibold text-lg mb-3">{item.feedback_title}</h4>
+                                )}
+
+                                {/* Main Message */}
+                                <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-4">
+                                    <p className="text-gray-300 whitespace-pre-wrap">{item.feedback_message}</p>
+                                </div>
+
+                                {/* Category Ratings */}
+                                {(item.ease_of_use_rating || item.features_rating || item.performance_rating) && (
+                                    <div className="grid grid-cols-3 gap-3 mb-4">
+                                        {item.ease_of_use_rating && (
+                                            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                                                <div className="text-xs text-blue-400 mb-1">Ease of Use</div>
+                                                <div className="flex items-center gap-1">
+                                                    {[...Array(5)].map((_, i) => (
+                                                        <span key={i} className={`text-xs ${i < item.ease_of_use_rating ? 'text-blue-400' : 'text-gray-600'}`}>
+                                                            ⭐
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {item.features_rating && (
+                                            <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
+                                                <div className="text-xs text-purple-400 mb-1">Features</div>
+                                                <div className="flex items-center gap-1">
+                                                    {[...Array(5)].map((_, i) => (
+                                                        <span key={i} className={`text-xs ${i < item.features_rating ? 'text-purple-400' : 'text-gray-600'}`}>
+                                                            ⭐
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {item.performance_rating && (
+                                            <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+                                                <div className="text-xs text-green-400 mb-1">Performance</div>
+                                                <div className="flex items-center gap-1">
+                                                    {[...Array(5)].map((_, i) => (
+                                                        <span key={i} className={`text-xs ${i < item.performance_rating ? 'text-green-400' : 'text-gray-600'}`}>
+                                                            ⭐
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Expandable Details */}
+                                {(item.likes || item.improvements || item.browser_info || item.page_url) && (
+                                    <button
+                                        onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                                        className="text-sm text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-2"
+                                    >
+                                        {isExpanded ? '▼ Hide Details' : '▶ Show More Details'}
+                                    </button>
+                                )}
                             </div>
-                            <span className="text-gray-400 text-sm">
-                                {new Date(item.created_at).toLocaleDateString()}
-                            </span>
-                        </div>
 
-                        {item.feedback_title && (
-                            <h4 className="text-white font-semibold mb-2">{item.feedback_title}</h4>
-                        )}
+                            {/* Expanded Details */}
+                            {isExpanded && (
+                                <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="border-t border-white/10 bg-black/20 p-6 space-y-4"
+                                >
+                                    {item.likes && (
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="text-green-400 text-lg">👍</span>
+                                                <h5 className="text-sm font-semibold text-green-400">What they like:</h5>
+                                            </div>
+                                            <p className="text-gray-300 text-sm pl-7 bg-green-500/5 border-l-2 border-green-500 py-2 px-3 rounded-r-lg">
+                                                {item.likes}
+                                            </p>
+                                        </div>
+                                    )}
 
-                        <p className="text-gray-300 mb-4">{item.feedback_message}</p>
+                                    {item.improvements && (
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="text-orange-400 text-lg">💡</span>
+                                                <h5 className="text-sm font-semibold text-orange-400">Suggested improvements:</h5>
+                                            </div>
+                                            <p className="text-gray-300 text-sm pl-7 bg-orange-500/5 border-l-2 border-orange-500 py-2 px-3 rounded-r-lg">
+                                                {item.improvements}
+                                            </p>
+                                        </div>
+                                    )}
 
-                        {item.likes && (
-                            <div className="mb-3">
-                                <p className="text-sm text-gray-400 mb-1">Likes:</p>
-                                <p className="text-green-400 text-sm">{item.likes}</p>
-                            </div>
-                        )}
+                                    {item.page_url && (
+                                        <div>
+                                            <h5 className="text-sm font-semibold text-gray-400 mb-1">Page URL:</h5>
+                                            <a href={item.page_url} target="_blank" rel="noopener noreferrer"
+                                                className="text-cyan-400 text-sm hover:underline break-all">
+                                                {item.page_url}
+                                            </a>
+                                        </div>
+                                    )}
 
-                        {item.improvements && (
-                            <div className="mb-3">
-                                <p className="text-sm text-gray-400 mb-1">Improvements:</p>
-                                <p className="text-orange-400 text-sm">{item.improvements}</p>
-                            </div>
-                        )}
+                                    {item.browser_info && (
+                                        <div>
+                                            <h5 className="text-sm font-semibold text-gray-400 mb-1">Browser Info:</h5>
+                                            <div className="text-xs text-gray-500 space-y-1">
+                                                <div>Platform: {item.browser_info.platform || 'N/A'}</div>
+                                                <div>Language: {item.browser_info.language || 'N/A'}</div>
+                                                {item.screen_resolution && <div>Screen: {item.screen_resolution}</div>}
+                                            </div>
+                                        </div>
+                                    )}
 
-                        {item.nps_score !== null && (
-                            <div className="flex items-center gap-2 text-sm">
-                                <span className="text-gray-400">NPS:</span>
-                                <span className={`font-semibold ${
-                                    item.nps_score >= 9 ? 'text-green-400' :
-                                    item.nps_score >= 7 ? 'text-yellow-400' :
-                                    'text-red-400'
-                                }`}>
-                                    {item.nps_score}/10
-                                </span>
-                            </div>
-                        )}
-                    </motion.div>
-                ))}
+                                    {item.can_contact && item.contact_email && (
+                                        <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-cyan-400">📧</span>
+                                                <span className="text-sm text-cyan-400">Contact: {item.contact_email}</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </motion.div>
+                            )}
+                        </motion.div>
+                    )
+                })}
 
                 {filteredFeedback.length === 0 && (
                     <div className="text-center py-12 text-gray-400">
-                        No feedback found for this filter
+                        <div className="text-4xl mb-4">📭</div>
+                        <p>No feedback found for this filter</p>
                     </div>
                 )}
             </div>

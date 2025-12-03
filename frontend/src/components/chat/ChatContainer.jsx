@@ -1,11 +1,15 @@
 import { useRef, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useChatStore } from '../../stores/chatStore'
+import { useDocumentStore } from '../../stores/documentStore'
 import MessageList from './MessageList'
 import ChatInput from './ChatInput'
+import DocumentUpload from '../documents/DocumentUpload'
 
 export default function ChatContainer() {
     const messages = useChatStore(state => state.messages)
+    const documents = useDocumentStore(state => state.documents)
+    const currentDocument = useDocumentStore(state => state.currentDocument)
     const messagesEndRef = useRef(null)
     const [greeting, setGreeting] = useState('')
     const [userName, setUserName] = useState('')
@@ -36,10 +40,46 @@ export default function ChatContainer() {
 
     return (
         <div className="flex-1 flex flex-col w-full max-w-full overflow-hidden bg-[#0f172a]">
+            {/* Active Document Header - Only shown when there are messages and a document is selected */}
+            {messages.length > 0 && currentDocument && (
+                <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex-shrink-0 border-b border-white/10 bg-[#1e293b]/80 backdrop-blur-sm sticky top-0 z-10"
+                >
+                    <div className="px-3 sm:px-6 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-2">
+                        {/* Document Info */}
+                        <div className="flex items-center gap-2 min-w-0">
+                            <svg className="w-4 h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <div className="min-w-0">
+                                <p className="text-sm font-medium text-white truncate">
+                                    {currentDocument.name}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                    {currentDocument.pages ? `${currentDocument.pages} pages` : ''}
+                                    {currentDocument.pages && currentDocument.chunks ? ' • ' : ''}
+                                    {currentDocument.chunks ? `${currentDocument.chunks} chunks` : ''}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-green-500/10 rounded-full">
+                                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                                <span className="text-xs text-green-400 font-medium hidden sm:inline">Active</span>
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+            )}
+
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden w-full max-w-full px-2 sm:px-4 py-4 sm:py-6">
                 {messages.length === 0 ? (
-                    <div className="h-full flex items-center justify-center relative overflow-hidden py-4 sm:py-0">
+                    <div className="h-full flex items-center justify-center relative overflow-hidden py-2 sm:py-4">
                         {/* Animated Background Orbs - Responsive sizes */}
                         {messages.length === 0 && (
                             <div className="absolute inset-0 pointer-events-none">
@@ -94,12 +134,12 @@ export default function ChatContainer() {
                                 initial={{ scale: 0.8, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
                                 transition={{ delay: 0.2, duration: 0.5 }}
-                                className="mb-3 sm:mb-6"
+                                className="mb-2 sm:mb-4"
                             >
                                 <div className="inline-flex items-center justify-center gap-3">
-                                    <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/50">
-                                        <svg className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 text-white" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8 0-1.48.41-2.86 1.12-4.06l10.94 10.94C14.86 19.59 13.48 20 12 20zm6.88-3.94L8.94 6.12C10.14 5.41 11.52 5 13 5c4.41 0 8 3.59 8 8 0 1.48-.41 2.86-1.12 4.06z"/>
+                                    <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/50">
+                                        <svg className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8 0-1.48.41-2.86 1.12-4.06l10.94 10.94C14.86 19.59 13.48 20 12 20zm6.88-3.94L8.94 6.12C10.14 5.41 11.52 5 13 5c4.41 0 8 3.59 8 8 0 1.48-.41 2.86-1.12 4.06z" />
                                         </svg>
                                     </div>
                                 </div>
@@ -110,16 +150,16 @@ export default function ChatContainer() {
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.4, duration: 0.5 }}
-                                className="mb-4 sm:mb-6 md:mb-8 px-2 sm:px-4"
+                                className="mb-4 sm:mb-6 px-2 sm:px-4"
                             >
-                                <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold text-white mb-1 sm:mb-3">
+                                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-1 sm:mb-2">
                                     {greeting}{userName && `, ${userName}`}! 👋
                                 </h2>
                                 <motion.p
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
                                     transition={{ delay: 0.6, duration: 0.5 }}
-                                    className="text-lg sm:text-xl md:text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-500 mb-1 sm:mb-2"
+                                    className="text-base sm:text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-500 mb-1"
                                 >
                                     Your AI Document Teacher
                                 </motion.p>
@@ -127,64 +167,25 @@ export default function ChatContainer() {
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
                                     transition={{ delay: 0.8, duration: 0.5 }}
-                                    className="text-gray-400 text-sm sm:text-base md:text-lg"
+                                    className="text-gray-400 text-xs sm:text-sm"
                                 >
                                     Upload documents and ask questions using voice or text
                                 </motion.p>
                             </motion.div>
 
-                            {/* Quick Start Features */}
-                            <motion.div
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 1.0, duration: 0.5 }}
-                                className="grid grid-cols-3 gap-2 sm:gap-4 max-w-3xl mx-auto"
-                            >
-                                {[
-                                    {
-                                        icon: '🎤',
-                                        title: 'Voice Input',
-                                        desc: 'Ask naturally'
-                                    },
-                                    {
-                                        icon: '🌐',
-                                        title: 'Multilingual',
-                                        desc: 'EN, KN & HI'
-                                    },
-                                    {
-                                        icon: '⚡',
-                                        title: 'Instant',
-                                        desc: 'AI responses'
-                                    }
-                                ].map((feature, i) => (
-                                    <motion.div
-                                        key={i}
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: 1.2 + i * 0.1, duration: 0.5 }}
-                                        whileHover={{ scale: 1.05, y: -5 }}
-                                        className="p-2 sm:p-4 bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl sm:rounded-2xl hover:border-cyan-500/30 transition-all cursor-default"
-                                    >
-                                        <div className="text-xl sm:text-3xl mb-1 sm:mb-2">{feature.icon}</div>
-                                        <h3 className="text-white font-semibold text-xs sm:text-base mb-0.5 sm:mb-1">{feature.title}</h3>
-                                        <p className="text-gray-400 text-[10px] sm:text-sm">{feature.desc}</p>
-                                    </motion.div>
-                                ))}
-                            </motion.div>
+                            {/* Large Upload Component - Prominent CTA */}
+                            {documents.length === 0 && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 1.0, duration: 0.5 }}
+                                    className="w-full max-w-xl mb-4"
+                                >
+                                    <DocumentUpload variant="large" />
+                                </motion.div>
+                            )}
 
-                            {/* Getting Started Hint */}
-                            <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ delay: 1.6, duration: 0.5 }}
-                                className="mt-4 sm:mt-8 flex items-center justify-center gap-2 text-gray-500 text-xs sm:text-sm"
-                            >
-                                <svg className="w-3 h-3 sm:w-4 sm:h-4 text-cyan-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <span className="hidden sm:inline">Upload a document or type a message below to get started</span>
-                                <span className="sm:hidden">Upload or type below to start</span>
-                            </motion.div>
+
                         </motion.div>
                     </div>
                 ) : (

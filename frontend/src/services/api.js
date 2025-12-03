@@ -198,16 +198,19 @@ export const uploadDocument = async (file) => {
 }
 
 // Chat APIs
-export const askQuestion = async (question, documentName = null, language = 'auto', chatHistory = []) => {
+export const askQuestion = async (question, documentNames = null, language = 'auto', chatHistory = []) => {
     // Format chat history for context (last 5 exchanges max)
     const formattedHistory = chatHistory.slice(-10).map(msg => ({
         role: msg.role,
         content: msg.text || msg.content
     }))
 
+    // Support both single document (string) and multiple documents (array) for backward compatibility
+    const docNames = Array.isArray(documentNames) ? documentNames : (documentNames ? [documentNames] : null)
+
     const response = await api.post('/ask', {
         question,
-        document_name: documentName,
+        document_names: docNames,  // Send as array
         language: language,  // Support multilingual TTS
         chat_history: formattedHistory  // Include conversation context
     })
@@ -381,25 +384,26 @@ export const getAvailableEngines = async () => {
     return response.data
 }
 
-export const getVoicePreferences = async () => {
-    const response = await api.get('/voice/preferences')
+// Temporarily commented out - Voice preferences feature
+// export const getVoicePreferences = async () => {
+//     const response = await api.get('/voice/preferences')
 
-    if (!response.data.success) {
-        throw new Error(response.data.message || 'Failed to get voice preferences')
-    }
+//     if (!response.data.success) {
+//         throw new Error(response.data.message || 'Failed to get voice preferences')
+//     }
 
-    return response.data.preferences
-}
+//     return response.data.preferences
+// }
 
-export const updateVoicePreferences = async (preferences) => {
-    const response = await api.put('/voice/preferences', preferences)
+// export const updateVoicePreferences = async (preferences) => {
+//     const response = await api.put('/voice/preferences', preferences)
 
-    if (!response.data.success) {
-        throw new Error(response.data.message || 'Failed to update voice preferences')
-    }
+//     if (!response.data.success) {
+//         throw new Error(response.data.message || 'Failed to update voice preferences')
+//     }
 
-    return response.data
-}
+//     return response.data
+// }
 
 // Account Management APIs
 export const changePassword = async (currentPassword, newPassword) => {
@@ -488,6 +492,206 @@ export const getUserLimits = async () => {
     }
 
     return response.data.usage
+}
+
+// ============= CHAT HISTORY APIs =============
+
+/**
+ * Convert snake_case to camelCase
+ */
+const toCamelCase = (obj) => {
+    if (!obj || typeof obj !== 'object') return obj
+    if (Array.isArray(obj)) return obj.map(toCamelCase)
+
+    return Object.keys(obj).reduce((acc, key) => {
+        const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+        acc[camelKey] = typeof obj[key] === 'object' ? toCamelCase(obj[key]) : obj[key]
+        return acc
+    }, {})
+}
+
+/**
+ * Get all chat histories for the current user
+ * @param {number} limit - Maximum number of chats to return
+ * @param {number} offset - Offset for pagination
+ * @returns {Promise<{chats: Array, total: number, limit: number, plan: string}>}
+ */
+export const getChatHistories = async (limit = 50, offset = 0) => {
+    const response = await api.get('/chat-history', {
+        params: { limit, offset }
+    })
+
+    if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to fetch chat histories')
+    }
+
+    // Convert snake_case to camelCase
+    return {
+        ...response.data,
+        chats: response.data.chats.map(toCamelCase)
+    }
+}
+
+/**
+ * Get a specific chat history by ID
+ * @param {string} chatId - Chat history ID
+ * @returns {Promise<{chat: Object}>}
+ */
+export const getChatHistoryById = async (chatId) => {
+    const response = await api.get(`/chat-history/${chatId}`)
+
+    if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to fetch chat history')
+    }
+
+    // Convert snake_case to camelCase
+    return toCamelCase(response.data.chat)
+}
+
+/**
+ * Create a new chat history session
+ * @param {string} documentName - Name of the document
+ * @param {string} documentId - ID of the document
+ * @param {string} firstMessage - First user message in the chat
+ * @returns {Promise<{chat: Object, remaining: number}>}
+ */
+export const createChatHistory = async (documentName, documentId, firstMessage) => {
+    const response = await api.post('/chat-history', {
+        document_name: documentName,
+        document_id: documentId,
+        first_message: firstMessage
+    })
+
+    if (!response.data.success) {
+        // Check if it's a limit error
+        if (response.data.limit_reached) {
+            throw new Error(response.data.error)
+        }
+        throw new Error(response.data.error || 'Failed to create chat history')
+    }
+
+    return response.data
+}
+
+/**
+ * Update chat history with new messages
+ * @param {string} chatId - Chat history ID
+ * @param {Array} messages - Array of message objects
+ * @returns {Promise<{success: boolean, remaining_queries: number}>}
+ */
+export const updateChatHistory = async (chatId, messages) => {
+    const response = await api.put(`/chat-history/${chatId}`, {
+        messages
+    })
+
+    if (!response.data.success) {
+        if (response.data.limit_reached) {
+            throw new Error(response.data.error)
+        }
+        throw new Error(response.data.error || 'Failed to update chat history')
+    }
+
+    return response.data
+}
+
+/**
+ * Append a single message to chat history
+ * @param {string} chatId - Chat history ID
+ * @param {Object} message - Message object {role, text, timestamp, ...}
+ * @returns {Promise<{success: boolean}>}
+ */
+export const appendMessageToChat = async (chatId, message) => {
+    const response = await api.post(`/chat-history/${chatId}/message`, {
+        message
+    })
+
+    if (!response.data.success) {
+        if (response.data.limit_reached) {
+            throw new Error(response.data.error)
+        }
+        throw new Error(response.data.error || 'Failed to append message')
+    }
+
+    return response.data
+}
+
+/**
+ * Delete a specific chat history
+ * @param {string} chatId - Chat history ID
+ * @returns {Promise<{success: boolean}>}
+ */
+export const deleteChatHistory = async (chatId) => {
+    const response = await api.delete(`/chat-history/${chatId}`)
+
+    if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to delete chat history')
+    }
+
+    return response.data
+}
+
+/**
+ * Delete all chat histories for the current user
+ * @returns {Promise<{success: boolean}>}
+ */
+export const clearAllChatHistories = async () => {
+    const response = await api.delete('/chat-history/clear-all')
+
+    if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to clear chat histories')
+    }
+
+    return response.data
+}
+
+/**
+ * Search chat histories by content
+ * @param {string} query - Search query
+ * @returns {Promise<{chats: Array, total: number}>}
+ */
+export const searchChatHistories = async (query) => {
+    const response = await api.get('/chat-history/search', {
+        params: { q: query }
+    })
+
+    if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to search chat histories')
+    }
+
+    return response.data
+}
+
+/**
+ * Filter chat histories by date range
+ * @param {string} startDate - Start date (ISO format)
+ * @param {string} endDate - End date (ISO format, optional)
+ * @returns {Promise<{chats: Array, total: number}>}
+ */
+export const filterChatHistoriesByDate = async (startDate, endDate = null) => {
+    const params = { start_date: startDate }
+    if (endDate) params.end_date = endDate
+
+    const response = await api.get('/chat-history/filter', { params })
+
+    if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to filter chat histories')
+    }
+
+    return response.data
+}
+
+/**
+ * Get user's plan limits and current usage
+ * @returns {Promise<{plan: string, limits: Object, usage: Object}>}
+ */
+export const getPlanLimits = async () => {
+    const response = await api.get('/plan/limits')
+
+    if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to fetch plan limits')
+    }
+
+    return response.data
 }
 
 export default api

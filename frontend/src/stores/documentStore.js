@@ -3,7 +3,7 @@ import { listDocuments, deleteDocument, clearAllDocuments } from '../services/ap
 
 export const useDocumentStore = create((set, get) => ({
     documents: [],
-    currentDocument: null,
+    activeDocuments: [], // Changed from currentDocument (single) to activeDocuments (array)
     loading: false,
     error: null,
 
@@ -31,11 +31,51 @@ export const useDocumentStore = create((set, get) => ({
         const newDoc = { ...document, id: Date.now() }
         return {
             documents: [...state.documents, newDoc],
-            currentDocument: newDoc
+            // Auto-activate newly uploaded document
+            activeDocuments: [...state.activeDocuments, newDoc]
         }
     }),
 
-    setCurrentDocument: (document) => set({ currentDocument: document }),
+    // Toggle document active/inactive
+    toggleDocumentActive: (document) => set((state) => {
+        const isActive = state.activeDocuments.some(doc => doc.name === document.name)
+        return {
+            activeDocuments: isActive
+                ? state.activeDocuments.filter(doc => doc.name !== document.name)
+                : [...state.activeDocuments, document]
+        }
+    }),
+
+    // Set multiple active documents
+    setActiveDocuments: (documents) => set({ activeDocuments: documents }),
+
+    // Select all documents
+    selectAllDocuments: () => set((state) => ({
+        activeDocuments: [...state.documents]
+    })),
+
+    // Deselect all documents
+    deselectAllDocuments: () => set({ activeDocuments: [] }),
+
+    // Backward compatibility: setCurrentDocument now adds to active list
+    setCurrentDocument: (document) => set((state) => {
+        const isAlreadyActive = state.activeDocuments.some(doc => doc.name === document?.name)
+        if (!document) {
+            return { activeDocuments: [] }
+        }
+        if (isAlreadyActive) {
+            return {} // No change
+        }
+        return {
+            activeDocuments: [...state.activeDocuments, document]
+        }
+    }),
+
+    // Backward compatibility: get first active document as current
+    getCurrentDocument: () => {
+        const state = get()
+        return state.activeDocuments[0] || null
+    },
 
     removeDocument: async (documentName) => {
         set({ loading: true, error: null })
@@ -43,7 +83,7 @@ export const useDocumentStore = create((set, get) => ({
             await deleteDocument(documentName)
             set((state) => ({
                 documents: state.documents.filter(doc => doc.name !== documentName),
-                currentDocument: state.currentDocument?.name === documentName ? null : state.currentDocument,
+                activeDocuments: state.activeDocuments.filter(doc => doc.name !== documentName),
                 loading: false
             }))
         } catch (error) {
@@ -55,7 +95,7 @@ export const useDocumentStore = create((set, get) => ({
         set({ loading: true, error: null })
         try {
             await clearAllDocuments()
-            set({ documents: [], currentDocument: null, loading: false })
+            set({ documents: [], activeDocuments: [], loading: false })
         } catch (error) {
             set({ error: error.message, loading: false })
         }

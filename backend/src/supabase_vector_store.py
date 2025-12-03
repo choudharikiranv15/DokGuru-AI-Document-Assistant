@@ -178,7 +178,7 @@ class SupabaseVectorStore:
             self.logger.error(f"Failed to add documents: {e}")
             return {'success': False, 'error': str(e)}
 
-    def search(self, query: str, n_results: int = 5, document_filter: str = None,
+    def search(self, query: str, n_results: int = 5, document_filter = None,
                user_id: str = None) -> Dict[str, Any]:
         """
         Search for similar chunks using vector similarity
@@ -188,7 +188,7 @@ class SupabaseVectorStore:
         Args:
             query: Search query text
             n_results: Number of results to return
-            document_filter: Optional filter by document name
+            document_filter: Optional filter by document name (str) or names (List[str])
             user_id: User ID for document isolation
 
         Returns:
@@ -205,8 +205,14 @@ class SupabaseVectorStore:
                 'match_count': n_results
             }
 
+            # Handle both single document and multiple documents
             if document_filter:
-                params['match_document'] = document_filter
+                if isinstance(document_filter, list):
+                    # Multiple documents - pass as array
+                    params['match_documents'] = document_filter
+                else:
+                    # Single document - convert to array for consistency
+                    params['match_documents'] = [document_filter]
 
             # Use match_documents RPC function
             result = self.client.rpc('match_documents', params).execute()
@@ -251,13 +257,23 @@ class SupabaseVectorStore:
             return self._fallback_search(query, user_id, n_results, document_filter)
 
     def _fallback_search(self, query: str, user_id: str, n_results: int = 5,
-                         document_filter: Optional[str] = None) -> Dict[str, Any]:
-        """Fallback text-based search when vector search fails - returns ChromaDB format"""
+                         document_filter = None) -> Dict[str, Any]:
+        """Fallback text-based search when vector search fails - returns ChromaDB format
+
+        Args:
+            document_filter: Single document name (str) or list of document names ([str])
+        """
         try:
             query_builder = self.client.table(self.table_name).select('*').eq('user_id', user_id or 'anonymous')
 
+            # Handle both single document and multiple documents
             if document_filter:
-                query_builder = query_builder.eq('document_name', document_filter)
+                if isinstance(document_filter, list):
+                    # Multiple documents - use IN clause
+                    query_builder = query_builder.in_('document_name', document_filter)
+                else:
+                    # Single document
+                    query_builder = query_builder.eq('document_name', document_filter)
 
             # Text search using ilike
             query_builder = query_builder.ilike('content', f'%{query}%').limit(n_results)

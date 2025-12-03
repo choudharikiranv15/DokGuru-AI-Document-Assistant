@@ -302,15 +302,29 @@ class Database:
             return []
 
     def get_all_site_feedback(self, limit: int = 100, status: str = None) -> list:
-        """Get all site feedback (admin use)"""
+        """Get all site feedback (admin use) - includes user email"""
         try:
+            # Get feedback first
             query = self.client.table('site_feedback').select('*')
 
             if status:
                 query = query.eq('status', status)
 
             response = query.order('created_at', desc=True).limit(limit).execute()
-            return response.data if response.data else []
+            feedback_list = response.data if response.data else []
+            
+            # Fetch user emails separately and merge
+            if feedback_list:
+                user_ids = [f['user_id'] for f in feedback_list if f.get('user_id')]
+                if user_ids:
+                    users_response = self.client.table('users').select('id, email').in_('id', user_ids).execute()
+                    user_map = {u['id']: u['email'] for u in users_response.data} if users_response.data else {}
+                    
+                    # Add email to each feedback item
+                    for item in feedback_list:
+                        item['user_email'] = user_map.get(item.get('user_id'))
+            
+            return feedback_list
         except Exception as e:
             import logging
             logging.error(f"Database error getting all site feedback: {e}")
@@ -498,3 +512,168 @@ class Database:
             import logging
             logging.error(f"Database error getting AI feedback analytics: {e}")
             return {}
+
+    # ============= CHAT HISTORY METHODS =============
+
+    def create_chat_history(self, user_id: str, document_id: str, document_name: str, first_message: str) -> Optional[Dict[str, Any]]:
+        """Create a new chat history session"""
+        try:
+            chat_data = {
+                'user_id': user_id,
+                'document_id': document_id,
+                'document_name': document_name,
+                'first_message': first_message,
+                'messages': [],
+                'message_count': 0
+            }
+            response = self.client.table('chat_histories').insert(chat_data).execute()
+            if response.data:
+                return response.data[0]
+            return None
+        except Exception as e:
+            import logging
+            logging.error(f"Database error creating chat history: {e}")
+            return None
+
+    def get_chat_histories(self, user_id: str, limit: int = 50, offset: int = 0) -> list:
+        """Get all chat histories for a user"""
+        try:
+            response = self.client.table('chat_histories') \
+                .select('*') \
+                .eq('user_id', user_id) \
+                .order('updated_at', desc=True) \
+                .limit(limit) \
+                .offset(offset) \
+                .execute()
+            return response.data if response.data else []
+        except Exception as e:
+            import logging
+            logging.error(f"Database error fetching chat histories: {e}")
+            return []
+
+    def get_chat_history_count(self, user_id: str) -> int:
+        """Get total count of chat histories for a user"""
+        try:
+            response = self.client.table('chat_histories') \
+                .select('id', count='exact') \
+                .eq('user_id', user_id) \
+                .execute()
+            return response.count if response.count else 0
+        except Exception as e:
+            import logging
+            logging.error(f"Database error counting chat histories: {e}")
+            return 0
+
+    def get_chat_history_by_id(self, chat_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific chat history by ID"""
+        try:
+            response = self.client.table('chat_histories') \
+                .select('*') \
+                .eq('id', chat_id) \
+                .eq('user_id', user_id) \
+                .execute()
+            if response.data and len(response.data) > 0:
+                return response.data[0]
+            return None
+        except Exception as e:
+            import logging
+            logging.error(f"Database error fetching chat history: {e}")
+            return None
+
+    def update_chat_history(self, chat_id: str, user_id: str, messages: list, message_count: int) -> bool:
+        """Update chat history with new messages"""
+        try:
+            response = self.client.table('chat_histories') \
+                .update({
+                    'messages': messages,
+                    'message_count': message_count,
+                    'updated_at': 'now()'
+                }) \
+                .eq('id', chat_id) \
+                .eq('user_id', user_id) \
+                .execute()
+            return bool(response.data)
+        except Exception as e:
+            import logging
+            logging.error(f"Database error updating chat history: {e}")
+            return False
+
+    def append_message_to_chat(self, chat_id: str, user_id: str, message: Dict[str, Any]) -> bool:
+        """Append a single message to chat history"""
+        try:
+            # First get current chat
+            chat = self.get_chat_history_by_id(chat_id, user_id)
+            if not chat:
+                return False
+
+            # Append new message
+            messages = chat.get('messages', [])
+            messages.append(message)
+            message_count = len(messages)
+
+            # Update
+            return self.update_chat_history(chat_id, user_id, messages, message_count)
+        except Exception as e:
+            import logging
+            logging.error(f"Database error appending message to chat: {e}")
+            return False
+
+    def delete_chat_history(self, chat_id: str, user_id: str) -> bool:
+        """Delete a chat history"""
+        try:
+            response = self.client.table('chat_histories') \
+                .delete() \
+                .eq('id', chat_id) \
+                .eq('user_id', user_id) \
+                .execute()
+            return bool(response.data)
+        except Exception as e:
+            import logging
+            logging.error(f"Database error deleting chat history: {e}")
+            return False
+
+    def delete_all_chat_histories(self, user_id: str) -> bool:
+        """Delete all chat histories for a user"""
+        try:
+            response = self.client.table('chat_histories') \
+                .delete() \
+                .eq('user_id', user_id) \
+                .execute()
+            return True
+        except Exception as e:
+            import logging
+            logging.error(f"Database error deleting all chat histories: {e}")
+            return False
+
+    def search_chat_histories(self, user_id: str, query: str) -> list:
+        """Search chat histories by content"""
+        try:
+            response = self.client.table('chat_histories') \
+                .select('*') \
+                .eq('user_id', user_id) \
+                .or_(f"first_message.ilike.%{query}%,document_name.ilike.%{query}%") \
+                .order('updated_at', desc=True) \
+                .execute()
+            return response.data if response.data else []
+        except Exception as e:
+            import logging
+            logging.error(f"Database error searching chat histories: {e}")
+            return []
+
+    def filter_chat_histories_by_date(self, user_id: str, start_date: str, end_date: str = None) -> list:
+        """Filter chat histories by date range"""
+        try:
+            query = self.client.table('chat_histories') \
+                .select('*') \
+                .eq('user_id', user_id) \
+                .gte('created_at', start_date)
+
+            if end_date:
+                query = query.lte('created_at', end_date)
+
+            response = query.order('updated_at', desc=True).execute()
+            return response.data if response.data else []
+        except Exception as e:
+            import logging
+            logging.error(f"Database error filtering chat histories: {e}")
+            return []

@@ -22,10 +22,75 @@ import About from './pages/About'
 import Contact from './pages/Contact'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import useAuthStore from './stores/authStore'
+import { useChatHistoryStore } from './stores/chatHistoryStore'
+import { useDocumentStore } from './stores/documentStore'
+import toast from 'react-hot-toast'
+
+// New Chat Button Component
+function NewChatButton() {
+    const startNewChat = useChatHistoryStore(state => state.startNewChat)
+    const getRemainingChats = useChatHistoryStore(state => state.getRemainingChats)
+    const planLimits = useChatHistoryStore(state => state.planLimits)
+
+    const handleNewChat = async () => {
+        await startNewChat()
+    }
+
+    const remaining = getRemainingChats()
+    const isPro = planLimits?.plan === 'pro' || planLimits?.plan === 'premium'
+
+    return (
+        <motion.button
+            whileHover={remaining > 0 ? { scale: 1.05 } : {}}
+            whileTap={remaining > 0 ? { scale: 0.95 } : {}}
+            onClick={handleNewChat}
+            disabled={!isPro && remaining === 0}
+            className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl transition-all text-white font-medium shadow-lg ${
+                !isPro && remaining === 0
+                    ? 'bg-gray-600 cursor-not-allowed opacity-50'
+                    : 'bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 shadow-cyan-500/30'
+            }`}
+            title={isPro ? 'Start new chat' : remaining === 0 ? 'Chat limit reached' : `${remaining} chats remaining`}
+        >
+            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span className="text-xs sm:text-sm hidden sm:inline">New Chat</span>
+            {!isPro && (
+                <span className={`text-xs px-1.5 py-0.5 rounded ${
+                    remaining === 0
+                        ? 'bg-red-500/30 text-red-300'
+                        : remaining <= 2
+                            ? 'bg-yellow-500/30 text-yellow-300'
+                            : 'bg-white/20'
+                }`}>
+                    {remaining}
+                </span>
+            )}
+        </motion.button>
+    )
+}
 
 function MainApp() {
     const [sidebarOpen, setSidebarOpen] = useState(true)
     const navigate = useNavigate()
+    const fetchChatHistories = useChatHistoryStore(state => state.fetchChatHistories)
+    const fetchDocuments = useDocumentStore(state => state.fetchDocuments)
+    const [hasLoadedHistory, setHasLoadedHistory] = useState(false)
+
+    // Auto-load documents and chat history on mount
+    useEffect(() => {
+        if (!hasLoadedHistory) {
+            const loadData = async () => {
+                // First fetch documents, then chat histories
+                await fetchDocuments()
+                // Don't auto-load last chat - let user start fresh or choose
+                await fetchChatHistories(false) // false = don't auto-load
+                setHasLoadedHistory(true)
+            }
+            loadData()
+        }
+    }, [fetchDocuments, fetchChatHistories, hasLoadedHistory])
 
     return (
         <Layout>
@@ -52,7 +117,7 @@ function MainApp() {
                             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                                 <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/50 flex-shrink-0">
                                     <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8 0-1.48.41-2.86 1.12-4.06l10.94 10.94C14.86 19.59 13.48 20 12 20zm6.88-3.94L8.94 6.12C10.14 5.41 11.52 5 13 5c4.41 0 8 3.59 8 8 0 1.48-.41 2.86-1.12 4.06z"/>
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8 0-1.48.41-2.86 1.12-4.06l10.94 10.94C14.86 19.59 13.48 20 12 20zm6.88-3.94L8.94 6.12C10.14 5.41 11.52 5 13 5c4.41 0 8 3.59 8 8 0 1.48-.41 2.86-1.12 4.06z" />
                                     </svg>
                                 </div>
                                 <h1 className="text-base sm:text-xl font-bold text-white truncate">
@@ -61,6 +126,7 @@ function MainApp() {
                             </div>
                         </div>
                         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+                            <NewChatButton />
                             <motion.button
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}

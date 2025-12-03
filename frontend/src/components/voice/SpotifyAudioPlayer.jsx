@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useAudioStore } from '../../stores/audioStore'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||
     (import.meta.env.PROD ? 'https://dokguru-backend-739437500880.asia-south1.run.app' : 'http://localhost:8080')
@@ -15,6 +16,7 @@ export default function SpotifyAudioPlayer({ audioUrl, audioUrls }) {
     const [accumulatedTime, setAccumulatedTime] = useState(0)
     const audioRef = useRef(null)
     const audioContextRef = useRef(null)
+    const stopBackgroundAudio = useAudioStore(state => state.stopBackgroundAudio)
 
     // Determine if we have a playlist or single audio
     const playlist = audioUrls && audioUrls.length > 0 ? audioUrls : (audioUrl ? [audioUrl] : [])
@@ -31,15 +33,42 @@ export default function SpotifyAudioPlayer({ audioUrl, audioUrls }) {
                 try {
                     const audio = new Audio(`${API_BASE_URL}${url}`)
                     await new Promise((resolve) => {
-                        audio.addEventListener('loadedmetadata', () => {
-                            durations.push(audio.duration || 0)
-                            resolve()
-                        })
-                        audio.addEventListener('error', () => {
-                            durations.push(0)
-                            resolve()
-                        })
-                        audio.load()
+                        let retries = 0
+                        const maxRetries = 5
+
+                        const attemptLoad = () => {
+                            audio.addEventListener('loadedmetadata', () => {
+                                if (audio.duration && audio.duration > 0) {
+                                    durations.push(audio.duration)
+                                    resolve()
+                                } else if (retries < maxRetries) {
+                                    retries++
+                                    console.log(`Playlist track duration invalid, retrying... (${retries}/${maxRetries})`)
+                                    setTimeout(() => {
+                                        audio.load()
+                                    }, 1000)
+                                } else {
+                                    durations.push(0)
+                                    resolve()
+                                }
+                            }, { once: true })
+
+                            audio.addEventListener('error', () => {
+                                if (retries < maxRetries) {
+                                    retries++
+                                    setTimeout(() => {
+                                        audio.load()
+                                    }, 1000)
+                                } else {
+                                    durations.push(0)
+                                    resolve()
+                                }
+                            }, { once: true })
+
+                            audio.load()
+                        }
+
+                        attemptLoad()
                     })
                 } catch {
                     durations.push(0)
@@ -128,13 +157,32 @@ export default function SpotifyAudioPlayer({ audioUrl, audioUrls }) {
         const audio = audioRef.current
         if (!audio) return
 
+        let retryCount = 0
+        const maxRetries = 10
+        let retryTimeout = null
+
         const updateTime = () => setCurrentTime(audio.currentTime)
         const updateDuration = () => {
-            if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+            if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration) && audio.duration > 0) {
                 setDuration(audio.duration)
+                setIsLoading(false)
                 // Update total duration if not playlist
                 if (!isPlaylist) {
                     setTotalDuration(audio.duration)
+                }
+            } else {
+                // Duration is invalid, retry loading
+                if (retryCount < maxRetries) {
+                    retryCount++
+                    console.log(`Audio duration invalid, retrying... (${retryCount}/${maxRetries})`)
+                    retryTimeout = setTimeout(() => {
+                        if (audio) {
+                            audio.load()
+                        }
+                    }, 1000) // Wait 1 second before retry
+                } else {
+                    console.warn('Max retries reached for audio loading')
+                    setIsLoading(false)
                 }
             }
         }
@@ -153,13 +201,24 @@ export default function SpotifyAudioPlayer({ audioUrl, audioUrls }) {
         const handleCanPlayThrough = () => {
             updateDuration()
             // Auto-play if we're in playing state (for playlist continuation)
-            if (isPlaying) {
+            if (isPlaying && duration > 0) {
                 audio.play().catch(() => {})
             }
         }
         const handleError = (e) => {
             console.error('Audio error:', e)
-            setIsLoading(false)
+            // Retry on error too
+            if (retryCount < maxRetries) {
+                retryCount++
+                console.log(`Audio error, retrying... (${retryCount}/${maxRetries})`)
+                retryTimeout = setTimeout(() => {
+                    if (audio) {
+                        audio.load()
+                    }
+                }, 1000)
+            } else {
+                setIsLoading(false)
+            }
         }
 
         audio.addEventListener('timeupdate', updateTime)
@@ -173,6 +232,7 @@ export default function SpotifyAudioPlayer({ audioUrl, audioUrls }) {
         audio.load()
 
         return () => {
+            if (retryTimeout) clearTimeout(retryTimeout)
             audio.removeEventListener('timeupdate', updateTime)
             audio.removeEventListener('loadedmetadata', updateDuration)
             audio.removeEventListener('durationchange', updateDuration)
@@ -193,10 +253,21 @@ export default function SpotifyAudioPlayer({ audioUrl, audioUrls }) {
         const audio = audioRef.current
         if (!audio) return
 
+        // Prevent playing if duration is still 0 (audio not ready yet)
+        if (!isPlaying && (!audio.duration || audio.duration === 0)) {
+            console.log('Audio not ready yet, please wait...')
+            return
+        }
+
         if (isPlaying) {
             audio.pause()
         } else {
-            audio.play()
+            // Stop background streaming audio before playing from player
+            stopBackgroundAudio()
+            audio.play().catch(err => {
+                console.error('Play failed:', err)
+                setIsPlaying(false)
+            })
         }
         setIsPlaying(!isPlaying)
     }
@@ -340,10 +411,11 @@ export default function SpotifyAudioPlayer({ audioUrl, audioUrls }) {
                 {/* Play/Pause Button */}
                 <button
                     onClick={togglePlay}
-                    disabled={isLoading}
+                    disabled={isLoading || duration === 0}
                     className="flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center bg-gradient-to-br from-cyan-500 to-purple-600 text-white rounded-full hover:scale-105 transition-all shadow-lg shadow-cyan-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={duration === 0 ? 'Audio loading, please wait...' : isPlaying ? 'Pause' : 'Play'}
                 >
-                    {isLoading ? (
+                    {(isLoading || duration === 0) ? (
                         <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />

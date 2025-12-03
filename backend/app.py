@@ -702,6 +702,15 @@ def login():
         if not bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
             return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
 
+        # Update last_login timestamp
+        try:
+            from datetime import datetime
+            db.client.table('users').update({
+                'last_login': datetime.utcnow().isoformat()
+            }).eq('id', user['id']).execute()
+        except Exception as e:
+            logger.warning(f"Failed to update last_login: {e}")
+
         # Generate JWT with is_admin flag
         token = generate_jwt(user['id'], user['email'], user.get('is_admin', False))
 
@@ -1105,22 +1114,27 @@ def submit_site_feedback():
         if feedback_type not in valid_types:
             return jsonify({'success': False, 'message': f'Invalid feedback type'}), 400
 
-        # Optional fields
+        # Optional fields - convert 0 ratings to None (NULL in DB)
+        ease_of_use = data.get('ease_of_use_rating')
+        features = data.get('features_rating')
+        performance = data.get('performance_rating')
+        nps = data.get('nps_score')
+        
         feedback_data = {
             'user_id': user_id,
             'overall_rating': overall_rating,
-            'ease_of_use_rating': data.get('ease_of_use_rating'),
-            'features_rating': data.get('features_rating'),
-            'performance_rating': data.get('performance_rating'),
+            'ease_of_use_rating': ease_of_use if ease_of_use and ease_of_use > 0 else None,
+            'features_rating': features if features and features > 0 else None,
+            'performance_rating': performance if performance and performance > 0 else None,
             'feedback_type': feedback_type,
-            'feedback_title': data.get('feedback_title', '').strip(),
+            'feedback_title': data.get('feedback_title', '').strip() or None,
             'feedback_message': feedback_message,
-            'likes': data.get('likes', '').strip(),
-            'improvements': data.get('improvements', '').strip(),
+            'likes': data.get('likes', '').strip() or None,
+            'improvements': data.get('improvements', '').strip() or None,
             'would_recommend': data.get('would_recommend'),
-            'nps_score': data.get('nps_score'),
+            'nps_score': nps if nps is not None and nps >= 0 else None,
             'can_contact': data.get('can_contact', False),
-            'contact_email': data.get('contact_email', '').strip(),
+            'contact_email': data.get('contact_email', '').strip() or None,
             'user_agent': request.headers.get('User-Agent'),
             'page_url': data.get('page_url', ''),
             'browser_info': data.get('browser_info'),
@@ -1401,7 +1415,8 @@ def get_upload_status(job_id):
 def ask_question():
     data = request.json
     question = data.get('question', '').strip()
-    document_name = data.get('document_name')  # Optional document filter
+    # Support both old (single document_name) and new (multiple document_names) format
+    document_names = data.get('document_names') or ([data.get('document_name')] if data.get('document_name') else None)
     language = data.get('language', 'auto')  # Optional language for TTS ('auto', 'en', 'hi', 'kn')
     client_chat_history = data.get('chat_history', [])  # Chat history from frontend
 
@@ -1444,11 +1459,11 @@ def ask_question():
             # Fallback to Redis cache
             conversation_history = rag_system.cache.get_user_conversation(user_id)
 
-        # Get response with user_id filtering for multi-tenancy
+        # Get response with user_id filtering for multi-tenancy and multiple documents
         response = rag_system.query(
             question,
             conversation_history,
-            document_name=document_name,
+            document_names=document_names,
             user_id=user_id
         )
 
@@ -1552,7 +1567,8 @@ def ask_question_stream():
     try:
         data = request.json
         question = data.get('question', '').strip()
-        document_name = data.get('document_name')
+        # Support both old (single document_name) and new (multiple document_names) format
+        document_names = data.get('document_names') or ([data.get('document_name')] if data.get('document_name') else None)
         language = data.get('language', 'en')
         user_id = request.user_id
 
@@ -1642,7 +1658,7 @@ def ask_question_stream():
                 for chunk in rag_system.query_stream(
                     question,
                     conversation_history,
-                    document_name=document_name,
+                    document_names=document_names,
                     user_id=user_id
                 ):
                     chunk_type = chunk.get('type')
@@ -2247,6 +2263,7 @@ def voice_query():
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/documents', methods=['GET'])
+@limiter.exempt  # Read-only endpoint, no rate limiting needed
 @require_auth
 def list_documents():
     """List all indexed documents with statistics for current user (cached)"""
@@ -2523,16 +2540,93 @@ def admin_get_users():
 @app.route('/admin/users/<user_id>', methods=['GET', 'OPTIONS'])
 @require_admin
 def admin_get_user_details(user_id):
-    """Get detailed user statistics (admin only)"""
+    """Get detailed user information and statistics (admin only)"""
     try:
-        stats = db.get_user_stats_admin(user_id) if db else {}
+        # Get user basic info
+        user = db.get_user_by_id(user_id)
+        if not user:
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+
+        # Get ALL user documents from ChromaDB (same source as profile)
+        all_documents = rag_system.list_documents(user_id=user_id) if rag_system else []
+        
+        # Format recent documents for display (limit to 10)
+        formatted_docs = []
+        if all_documents:
+            for doc in all_documents[:10]:
+                formatted_docs.append({
+                    'id': doc.get('name', 'unknown'),
+                    'filename': doc.get('name', 'Untitled'),
+                    'created_at': doc.get('uploaded_at', doc.get('created_at')),
+                    'file_size': f"{doc.get('total_chunks', 0)} chunks"
+                })
+        
+        # Get user feedback count
+        user_feedback = db.get_user_site_feedback(user_id)
+        
+        # Get user query count from chat_histories table
+        try:
+            query_response = db.client.table('chat_histories').select('id', count='exact').eq('user_id', user_id).execute()
+            query_count = query_response.count if query_response.count else 0
+        except Exception as e:
+            logger.warning(f"Failed to get query count: {e}")
+            query_count = 0
+        
+        # Format last login - return full timestamp in IST (Bangalore timezone)
+        last_login = user.get('last_login')
+        if last_login:
+            try:
+                from datetime import datetime, timedelta
+                if isinstance(last_login, str):
+                    last_login_dt = datetime.fromisoformat(last_login.replace('Z', '+00:00'))
+                else:
+                    last_login_dt = last_login
+                
+                # Convert to IST (UTC+5:30)
+                ist_offset = timedelta(hours=5, minutes=30)
+                last_login_ist = last_login_dt + ist_offset
+                last_active = last_login_ist.strftime('%b %d, %Y at %I:%M %p IST')
+            except:
+                last_active = 'Recently'
+        else:
+            last_active = 'Never'
+        
+        # Get user stats
+        stats = {
+            'document_count': len(all_documents) if all_documents else 0,
+            'query_count': query_count,
+            'feedback_count': len(user_feedback) if user_feedback else 0,
+            'last_active': last_active
+        }
+
+        # Get recent queries from chat_histories
+        recent_queries = []
+        try:
+            queries_response = db.client.table('chat_histories').select('query, created_at').eq('user_id', user_id).order('created_at', desc=True).limit(5).execute()
+            if queries_response.data:
+                recent_queries = queries_response.data
+        except Exception as e:
+            logger.warning(f"Failed to get recent queries: {e}")
 
         return jsonify({
             'success': True,
-            'data': stats
+            'user': {
+                'id': user['id'],
+                'email': user['email'],
+                'role': user.get('role'),
+                'institution': user.get('institution'),
+                'occupation': user.get('occupation'),
+                'is_admin': user.get('is_admin', False),
+                'created_at': user['created_at'].isoformat() if hasattr(user['created_at'], 'isoformat') else str(user['created_at']),
+                'last_login': user.get('last_login')
+            },
+            'stats': stats,
+            'documents': formatted_docs,
+            'recent_queries': recent_queries
         })
     except Exception as e:
         logger.error(f"Admin get user details error: {e}")
+        capture_exception(e, {'endpoint': 'admin_user_details', 'user_id': user_id})
         return jsonify({'success': False, 'message': str(e)}), 500
 
 
@@ -2738,6 +2832,327 @@ warmup_thread = threading.Thread(target=warmup_models, daemon=True)
 warmup_thread.start()
 
 # ============= END MODEL WARMUP =============
+
+# ============= CHAT HISTORY API ENDPOINTS =============
+
+@app.route('/chat-history', methods=['POST'])
+@require_auth
+def create_chat_history():
+    """Create a new chat history session"""
+    try:
+        from src.plans_config import check_limit
+        
+        user_id = request.user_id
+        data = request.get_json()
+        document_name = data.get('document_name')
+        document_id = data.get('document_id')
+        first_message = data.get('first_message', 'New conversation')
+
+        if not document_name:
+            return jsonify({'error': 'document_name is required'}), 400
+
+        # Check plan limits
+        user_plan = db.get_user_plan(user_id)
+        plan_type = user_plan.get('plan_type', 'free') if user_plan else 'free'
+
+        # Get current chat count
+        current_count = db.get_chat_history_count(user_id)
+
+        # Check if user has reached chat history limit
+        allowed, limit, message = check_limit(plan_type, 'max_chat_histories', current_count)
+        if not allowed:
+            return jsonify({
+                'error': message,
+                'limit_reached': True,
+                'limit': limit,
+                'current': current_count,
+                'plan': plan_type
+            }), 403
+
+        # Create chat history
+        chat = db.create_chat_history(
+            user_id=user_id,
+            document_id=document_id,
+            document_name=document_name,
+            first_message=first_message
+        )
+
+        if chat:
+            return jsonify({
+                'success': True,
+                'chat': chat,
+                'remaining': limit - current_count - 1 if limit != -1 else -1
+            }), 201
+        else:
+            return jsonify({'error': 'Failed to create chat history'}), 500
+
+    except Exception as e:
+        logger.error(f"Error creating chat history: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/chat-history', methods=['GET'])
+@limiter.exempt  # Read-only endpoint, no rate limiting needed
+@require_auth
+def get_chat_histories():
+    """Get all chat histories for the current user"""
+    try:
+        user_id = request.user_id
+        limit = request.args.get('limit', 50, type=int)
+        offset = request.args.get('offset', 0, type=int)
+
+        chats = db.get_chat_histories(user_id, limit=limit, offset=offset)
+        total_count = db.get_chat_history_count(user_id)
+
+        # Get plan info
+        user_plan = db.get_user_plan(user_id)
+        plan_type = user_plan.get('plan_type', 'free') if user_plan else 'free'
+
+        from src.plans_config import get_plan_limits
+        plan_limits = get_plan_limits(plan_type)
+
+        return jsonify({
+            'success': True,
+            'chats': chats,
+            'total': total_count,
+            'limit': plan_limits.get('max_chat_histories', 5),
+            'plan': plan_type
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error fetching chat histories: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/chat-history/<chat_id>', methods=['GET'])
+@require_auth
+def get_chat_history(chat_id):
+    """Get a specific chat history by ID"""
+    try:
+        user_id = request.user_id
+        chat = db.get_chat_history_by_id(chat_id, user_id)
+
+        if not chat:
+            return jsonify({'error': 'Chat history not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'chat': chat
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error fetching chat history: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/chat-history/<chat_id>', methods=['PUT'])
+@require_auth
+def update_chat_history(chat_id):
+    """Update chat history with new messages"""
+    try:
+        user_id = request.user_id
+        from src.plans_config import check_limit
+
+        data = request.get_json()
+        messages = data.get('messages', [])
+
+        if not messages:
+            return jsonify({'error': 'messages array is required'}), 400
+
+        # Check plan limits for queries per chat
+        user_plan = db.get_user_plan(user_id)
+        plan_type = user_plan.get('plan_type', 'free') if user_plan else 'free'
+
+        # Count user messages (queries) in the chat
+        user_message_count = sum(1 for msg in messages if msg.get('role') == 'user')
+
+        allowed, limit, message = check_limit(plan_type, 'max_queries_per_chat', user_message_count)
+        if not allowed:
+            return jsonify({
+                'error': message,
+                'limit_reached': True,
+                'limit': limit,
+                'current': user_message_count,
+                'plan': plan_type
+            }), 403
+
+        # Update chat
+        success = db.update_chat_history(
+            chat_id=chat_id,
+            user_id=user_id,
+            messages=messages,
+            message_count=len(messages)
+        )
+
+        if success:
+            return jsonify({
+                'success': True,
+                'remaining_queries': limit - user_message_count if limit != -1 else -1
+            }), 200
+        else:
+            return jsonify({'error': 'Failed to update chat history'}), 500
+
+    except Exception as e:
+        logger.error(f"Error updating chat history: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/chat-history/<chat_id>/message', methods=['POST'])
+@require_auth
+def append_message(chat_id):
+    """Append a single message to chat history"""
+    try:
+        user_id = request.user_id
+        from src.plans_config import check_limit
+
+        data = request.get_json()
+        message = data.get('message')
+
+        if not message:
+            return jsonify({'error': 'message object is required'}), 400
+
+        # Get current chat
+        chat = db.get_chat_history_by_id(chat_id, user_id)
+        if not chat:
+            return jsonify({'error': 'Chat history not found'}), 404
+
+        # Check plan limits if it's a user message
+        if message.get('role') == 'user':
+            user_plan = db.get_user_plan(user_id)
+            plan_type = user_plan.get('plan_type', 'free') if user_plan else 'free'
+
+            # Count existing user messages
+            existing_messages = chat.get('messages', [])
+            user_message_count = sum(1 for msg in existing_messages if msg.get('role') == 'user')
+
+            allowed, limit, error_message = check_limit(plan_type, 'max_queries_per_chat', user_message_count + 1)
+            if not allowed:
+                return jsonify({
+                    'error': error_message,
+                    'limit_reached': True,
+                    'limit': limit,
+                    'current': user_message_count,
+                    'plan': plan_type
+                }), 403
+
+        # Append message
+        success = db.append_message_to_chat(chat_id, user_id, message)
+
+        if success:
+            return jsonify({'success': True}), 200
+        else:
+            return jsonify({'error': 'Failed to append message'}), 500
+
+    except Exception as e:
+        logger.error(f"Error appending message: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/chat-history/<chat_id>', methods=['DELETE'])
+@require_auth
+def delete_chat_history(chat_id):
+    """Delete a specific chat history"""
+    try:
+        user_id = request.user_id
+        success = db.delete_chat_history(chat_id, user_id)
+
+        if success:
+            return jsonify({'success': True}), 200
+        else:
+            return jsonify({'error': 'Failed to delete chat history'}), 500
+
+    except Exception as e:
+        logger.error(f"Error deleting chat history: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/chat-history/clear-all', methods=['DELETE'])
+@require_auth
+def clear_all_chat_histories(current_user):
+    """Delete all chat histories for the current user"""
+    try:
+        success = db.delete_all_chat_histories(user_id)
+
+        if success:
+            return jsonify({'success': True}), 200
+        else:
+            return jsonify({'error': 'Failed to clear chat histories'}), 500
+
+    except Exception as e:
+        logger.error(f"Error clearing chat histories: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/chat-history/search', methods=['GET'])
+@require_auth
+def search_chat_histories(current_user):
+    """Search chat histories by content"""
+    try:
+        query = request.args.get('q', '')
+
+        if not query:
+            return jsonify({'error': 'Search query (q) is required'}), 400
+
+        chats = db.search_chat_histories(user_id, query)
+
+        return jsonify({
+            'success': True,
+            'chats': chats,
+            'total': len(chats)
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error searching chat histories: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/chat-history/filter', methods=['GET'])
+@require_auth
+def filter_chat_histories(current_user):
+    """Filter chat histories by date range"""
+    try:
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+
+        if not start_date:
+            return jsonify({'error': 'start_date is required'}), 400
+
+        chats = db.filter_chat_histories_by_date(user_id, start_date, end_date)
+
+        return jsonify({
+            'success': True,
+            'chats': chats,
+            'total': len(chats)
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error filtering chat histories: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/plan/limits', methods=['GET'])
+@require_auth
+def get_plan_limits_endpoint(current_user):
+    """Get current user's plan limits and usage"""
+    try:
+        from src.plans_config import get_plan_limits
+
+        # Get user plan
+        user_plan = db.get_user_plan(user_id)
+        plan_type = user_plan.get('plan_type', 'free') if user_plan else 'free'
+
+        # Get plan limits
+        limits = get_plan_limits(plan_type)
+
+        # Get current usage
+        chat_count = db.get_chat_history_count(user_id)
+
+        return jsonify({
+            'success': True,
+            'plan': plan_type,
+            'limits': limits,
+            'usage': {
+                'chat_histories': chat_count,
+                'documents': user_plan.get('documents_uploaded', 0) if user_plan else 0
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error fetching plan limits: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ============= END CHAT HISTORY API ENDPOINTS =============
 
 if __name__ == '__main__':
     print("=" * 70)

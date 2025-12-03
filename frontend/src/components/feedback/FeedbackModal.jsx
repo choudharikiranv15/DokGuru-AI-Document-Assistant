@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'react-hot-toast'
 import StarRating from './StarRating'
+import useAuthStore from '../../stores/authStore'
 
 export default function FeedbackModal({ isOpen, onClose }) {
+    const token = useAuthStore(state => state.token)
     const [step, setStep] = useState(1) // 1: Ratings, 2: Details, 3: Success
     const [loading, setLoading] = useState(false)
 
@@ -66,11 +68,11 @@ export default function FeedbackModal({ isOpen, onClose }) {
                 screenResolution: `${window.screen.width}x${window.screen.height}`
             }
 
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/site-feedback`, {
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/site-feedback`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
                     ...formData,
@@ -169,17 +171,15 @@ export default function FeedbackModal({ isOpen, onClose }) {
                                 <div className="flex items-center gap-2">
                                     {[1, 2].map((s) => (
                                         <div key={s} className="flex items-center flex-1">
-                                            <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${
-                                                step >= s
-                                                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
-                                                    : 'bg-gray-700 text-gray-400'
-                                            }`}>
+                                            <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${step >= s
+                                                ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                                                : 'bg-gray-700 text-gray-400'
+                                                }`}>
                                                 {s}
                                             </div>
                                             {s < 2 && (
-                                                <div className={`flex-1 h-1 mx-2 rounded ${
-                                                    step > s ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gray-700'
-                                                }`} />
+                                                <div className={`flex-1 h-1 mx-2 rounded ${step > s ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gray-700'
+                                                    }`} />
                                             )}
                                         </div>
                                     ))}
@@ -241,11 +241,10 @@ export default function FeedbackModal({ isOpen, onClose }) {
                                                             onClick={() => handleChange('feedback_type', type.value)}
                                                             whileHover={{ scale: 1.02 }}
                                                             whileTap={{ scale: 0.98 }}
-                                                            className={`p-3 rounded-xl border-2 transition-all text-sm font-medium ${
-                                                                formData.feedback_type === type.value
-                                                                    ? 'border-purple-500 bg-purple-500/20 text-white'
-                                                                    : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
-                                                            }`}
+                                                            className={`p-3 rounded-xl border-2 transition-all text-sm font-medium ${formData.feedback_type === type.value
+                                                                ? 'border-purple-500 bg-purple-500/20 text-white'
+                                                                : 'border-white/10 bg-white/5 text-gray-400 hover:border-white/20'
+                                                                }`}
                                                         >
                                                             {type.label}
                                                         </motion.button>
@@ -264,15 +263,14 @@ export default function FeedbackModal({ isOpen, onClose }) {
                                                             key={score}
                                                             type="button"
                                                             onClick={() => handleChange('nps_score', score)}
-                                                            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
-                                                                formData.nps_score === score
-                                                                    ? score <= 6
-                                                                        ? 'bg-red-500 text-white'
-                                                                        : score <= 8
+                                                            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${formData.nps_score === score
+                                                                ? score <= 6
+                                                                    ? 'bg-red-500 text-white'
+                                                                    : score <= 8
                                                                         ? 'bg-yellow-500 text-white'
                                                                         : 'bg-green-500 text-white'
-                                                                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                                                            }`}
+                                                                : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                                                                }`}
                                                         >
                                                             {score}
                                                         </button>

@@ -3,6 +3,8 @@ import { motion } from 'framer-motion'
 import { toast } from 'react-hot-toast'
 import { useChatStore } from '../../stores/chatStore'
 import { useDocumentStore } from '../../stores/documentStore'
+import { useAudioStore } from '../../stores/audioStore'
+import { useChatHistoryStore } from '../../stores/chatHistoryStore'
 import { askQuestion } from '../../services/api'
 import api from '../../services/api'
 
@@ -29,11 +31,31 @@ export default function ChatInput({ setIsThinking }) {
     const addMessage = useChatStore(state => state.addMessage)
     const updateMessage = useChatStore(state => state.updateMessage)
     const messages = useChatStore(state => state.messages)  // Get chat history for context
-    const currentDocument = useDocumentStore(state => state.currentDocument)
+    const activeDocuments = useDocumentStore(state => state.activeDocuments)
     const documents = useDocumentStore(state => state.documents)
+    const registerBackgroundAudio = useAudioStore(state => state.registerBackgroundAudio)
+    const setBackgroundPlaying = useAudioStore(state => state.setBackgroundPlaying)
+
+    // Chat history functions
+    const saveChatHistory = useChatHistoryStore(state => state.saveChatHistory)
+    const currentChatId = useChatHistoryStore(state => state.currentChatId)
 
     // Check if input should be blocked
     const isInputBlocked = loading || isStreaming || isPlayingAudio
+
+    // Auto-save chat history
+    const autoSaveChatHistory = async () => {
+        if (messages.length >= 2 && activeDocuments.length > 0 && !currentChatId) {
+            // Only auto-save if we have at least one Q&A pair and no existing chat ID
+            // Save with first active document's name
+            const firstDoc = activeDocuments[0]
+            try {
+                await saveChatHistory(messages, firstDoc.name, firstDoc.id)
+            } catch (error) {
+                console.error('Failed to auto-save chat:', error)
+            }
+        }
+    }
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -44,6 +66,15 @@ export default function ChatInput({ setIsThinking }) {
             toast.error('Please upload a document first before asking questions', {
                 duration: 4000,
                 icon: '📄'
+            })
+            return
+        }
+
+        // Check if any documents are active
+        if (!activeDocuments || activeDocuments.length === 0) {
+            toast.error('Please select at least one document to query', {
+                duration: 4000,
+                icon: '☑️'
             })
             return
         }
@@ -73,8 +104,9 @@ export default function ChatInput({ setIsThinking }) {
         setIsThinking(true)
 
         try {
-            // Pass chat history for context-aware follow-up questions
-            const response = await askQuestion(userMessage, currentDocument?.name, 'auto', messages)
+            // Pass chat history and array of active document names for context-aware follow-up questions
+            const documentNames = activeDocuments.map(doc => doc.name)
+            const response = await askQuestion(userMessage, documentNames, 'auto', messages)
 
             addMessage({
                 role: 'assistant',
@@ -86,6 +118,9 @@ export default function ChatInput({ setIsThinking }) {
                 language: 'auto',
                 timestamp: new Date().toISOString()
             })
+
+            // Auto-save chat history after getting response
+            await autoSaveChatHistory()
         } catch (error) {
             toast.error(error.message || 'Failed to get response')
         } finally {
@@ -146,6 +181,8 @@ export default function ChatInput({ setIsThinking }) {
             throw new Error('Authentication required for streaming')
         }
 
+        const documentNames = activeDocuments.map(doc => doc.name)
+
         const response = await fetch(`${api.defaults.baseURL}/ask-stream`, {
             method: 'POST',
             headers: {
@@ -154,7 +191,7 @@ export default function ChatInput({ setIsThinking }) {
             },
             body: JSON.stringify({
                 question,
-                document_name: currentDocument?.name,
+                document_names: documentNames, // Changed from document_name to document_names (array)
                 language: 'auto'
             }),
             signal: abortControllerRef.current.signal
@@ -259,6 +296,7 @@ export default function ChatInput({ setIsThinking }) {
 
         const audioItem = audioQueue[currentAudioIndex]
         setIsPlayingAudio(true)
+        setBackgroundPlaying(true) // Update global state
 
         // Construct full URL with API base
         const baseUrl = api.defaults.baseURL
@@ -269,12 +307,14 @@ export default function ChatInput({ setIsThinking }) {
             .catch(err => {
                 console.error('Audio play error:', err)
                 setIsPlayingAudio(false)
+                setBackgroundPlaying(false)
                 setCurrentAudioIndex(prev => prev + 1)
             })
     }
 
     const handleAudioEnded = () => {
         setIsPlayingAudio(false)
+        setBackgroundPlaying(false)
         setCurrentAudioIndex(prev => prev + 1)
     }
 
@@ -291,6 +331,7 @@ export default function ChatInput({ setIsThinking }) {
         if (audioRef.current && isPlayingAudio) {
             audioRef.current.pause()
             setIsPlayingAudio(false)
+            setBackgroundPlaying(false)
         }
     }
 
@@ -396,7 +437,7 @@ export default function ChatInput({ setIsThinking }) {
         <div className="p-2 sm:p-4">
             <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-2 sm:space-y-3">
                 {/* Streaming Status Bar */}
-                {isStreaming && audioQueue.length > 0 && (
+                {(isStreaming || isPlayingAudio) && audioQueue.length > 0 && (
                     <motion.div
                         initial={{ opacity: 0, y: -10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -414,6 +455,7 @@ export default function ChatInput({ setIsThinking }) {
                                     type="button"
                                     onClick={toggleMute}
                                     className="p-1.5 rounded-lg hover:bg-gray-700 transition-colors"
+                                    title={isMuted ? "Unmute background audio" : "Mute background audio"}
                                 >
                                     {isMuted ? (
                                         <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -431,10 +473,35 @@ export default function ChatInput({ setIsThinking }) {
                                         type="button"
                                         onClick={skipAudio}
                                         className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded transition-colors text-gray-300"
+                                        title="Skip this audio segment"
                                     >
                                         Skip
                                     </button>
                                 )}
+                                {/* Stop All Button - Always visible during streaming */}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        // Stop background audio completely
+                                        if (audioRef.current) {
+                                            audioRef.current.pause()
+                                            audioRef.current.currentTime = 0
+                                        }
+                                        setIsPlayingAudio(false)
+                                        setBackgroundPlaying(false)
+                                        setIsMuted(true)
+                                        toast.success('Background audio stopped - use player below to replay')
+                                    }}
+                                    className="px-2 sm:px-3 py-1 text-xs bg-red-500/20 hover:bg-red-500/30 text-red-400 hover:text-red-300 rounded transition-colors font-medium border border-red-500/30"
+                                    title="Stop background audio playback"
+                                >
+                                    <div className="flex items-center gap-1">
+                                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M6 6h12v12H6z" />
+                                        </svg>
+                                        <span className="hidden sm:inline">Stop</span>
+                                    </div>
+                                </button>
                                 <span className="text-xs text-gray-400">
                                     {currentAudioIndex + 1}/{audioQueue.length}
                                 </span>
@@ -470,11 +537,10 @@ export default function ChatInput({ setIsThinking }) {
                         <button
                             type="button"
                             onClick={() => setStreamingMode(!streamingMode)}
-                            className={`p-2 sm:p-3 rounded-full transition-all duration-200 flex-shrink-0 ${
-                                streamingMode
-                                    ? 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30'
-                                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                            }`}
+                            className={`p-2 sm:p-3 rounded-full transition-all duration-200 flex-shrink-0 ${streamingMode
+                                ? 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30'
+                                : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                                }`}
                         >
                             <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 {streamingMode ? (
@@ -484,8 +550,8 @@ export default function ChatInput({ setIsThinking }) {
                                 )}
                             </svg>
                         </button>
-                        {/* Tooltip */}
-                        <div className="absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 w-52 hidden sm:block">
+                        {/* Tooltip - positioned above with high z-index to avoid overlap */}
+                        <div className="absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-[9999] w-52 hidden sm:block shadow-2xl">
                             <div className="text-xs font-medium text-white mb-1">
                                 {streamingMode ? 'Streaming Mode' : 'Classic Mode'}
                             </div>
@@ -500,13 +566,32 @@ export default function ChatInput({ setIsThinking }) {
 
                     {/* Text Input with integrated Voice Button */}
                     <div className="flex-1 relative min-w-0">
+                        {/* Lock Icon - shown when no documents */}
+                        {(!documents || documents.length === 0) && (
+                            <div className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+                                <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                            </div>
+                        )}
+
                         <input
                             type="text"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            placeholder={isListening ? "" : (isStreaming ? "Streaming..." : (isPlayingAudio ? "Audio playing..." : "Ask a question..."))}
-                            disabled={isInputBlocked || isListening}
-                            className="w-full pl-3 sm:pl-4 pr-10 sm:pr-12 py-2.5 sm:py-3 bg-white/5 backdrop-blur-sm border border-white/10 rounded-full focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-white placeholder-gray-500 transition-all duration-200 text-sm disabled:opacity-50"
+                            placeholder={
+                                isListening ? "" :
+                                    (!documents || documents.length === 0) ? "🔒 Upload a PDF document first to unlock chat..." :
+                                        (isStreaming ? "Streaming..." :
+                                            (isPlayingAudio ? "Audio playing..." :
+                                                "Ask a question..."))
+                            }
+                            disabled={isInputBlocked || isListening || !documents || documents.length === 0}
+                            className={`w-full py-2.5 sm:py-3 bg-white/5 backdrop-blur-sm border border-white/10 rounded-full focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-white placeholder-gray-500 transition-all duration-200 text-sm ${(!documents || documents.length === 0)
+                                ? 'pl-10 sm:pl-12 pr-10 sm:pr-12 opacity-60 cursor-not-allowed'
+                                : 'pl-3 sm:pl-4 pr-10 sm:pr-12 disabled:opacity-50'
+                                }`}
+                            title={(!documents || documents.length === 0) ? "Please upload a document first" : ""}
                         />
 
                         {/* Recording Indicator */}
@@ -531,13 +616,15 @@ export default function ChatInput({ setIsThinking }) {
                         <button
                             type="button"
                             onClick={toggleVoiceRecording}
-                            disabled={loading}
-                            className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 ${
-                                isListening
-                                    ? 'bg-red-500 hover:bg-red-600 animate-pulse text-white'
-                                    : 'bg-white/10 hover:bg-white/20 text-cyan-400'
-                            }`}
-                            title={isListening ? "Stop listening" : "Start voice input"}
+                            disabled={loading || !documents || documents.length === 0}
+                            className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 ${isListening
+                                ? 'bg-red-500 hover:bg-red-600 animate-pulse text-white'
+                                : 'bg-white/10 hover:bg-white/20 text-cyan-400'
+                                }`}
+                            title={
+                                (!documents || documents.length === 0) ? "Upload a document first" :
+                                    (isListening ? "Stop listening" : "Start voice input")
+                            }
                         >
                             {isListening ? (
                                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -566,16 +653,21 @@ export default function ChatInput({ setIsThinking }) {
                         </motion.button>
                     ) : (
                         <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
+                            whileHover={{ scale: (!input.trim() || isInputBlocked || isListening || !documents || documents.length === 0) ? 1 : 1.05 }}
+                            whileTap={{ scale: (!input.trim() || isInputBlocked || isListening || !documents || documents.length === 0) ? 1 : 0.95 }}
                             type="submit"
-                            disabled={!input.trim() || isInputBlocked || isListening}
+                            disabled={!input.trim() || isInputBlocked || isListening || !documents || documents.length === 0}
                             className="p-2.5 sm:p-3 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-cyan-500/30 flex-shrink-0"
+                            title={(!documents || documents.length === 0) ? "Upload a document first" : "Send message"}
                         >
                             {loading ? (
                                 <svg className="animate-spin h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                            ) : (!documents || documents.length === 0) ? (
+                                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                 </svg>
                             ) : (
                                 <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -589,7 +681,10 @@ export default function ChatInput({ setIsThinking }) {
 
             {/* Hidden Audio Element for streaming playback */}
             <audio
-                ref={audioRef}
+                ref={(el) => {
+                    audioRef.current = el
+                    if (el) registerBackgroundAudio(el)
+                }}
                 onEnded={handleAudioEnded}
                 className="hidden"
             />

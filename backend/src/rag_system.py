@@ -235,26 +235,34 @@ class RAGSystem:
             self.logger.error(f"Error finding PDF path: {e}")
             return None
 
-    def query(self, question: str, conversation_history: List[str] = None, document_name: str = None, user_id: str = None) -> Dict[str, Any]:
-        """Query the RAG system with optional document filtering, user filtering, and caching"""
+    def query(self, question: str, conversation_history: List[str] = None, document_names: List[str] = None, document_name: str = None, user_id: str = None) -> Dict[str, Any]:
+        """Query the RAG system with optional document filtering, user filtering, and caching
+
+        Supports both single document (document_name) and multiple documents (document_names) for backward compatibility
+        """
+        # Backward compatibility: convert single document_name to list
+        if document_name and not document_names:
+            document_names = [document_name]
+
         try:
             self.logger.info(f"Processing query: {question} (user: {user_id})")
-            if document_name:
-                self.logger.info(f"Filtering to document: {document_name}")
+            if document_names:
+                self.logger.info(f"Filtering to documents: {', '.join(document_names)}")
 
             # Build cache key with user_id
             cache_key_suffix = f"_{user_id}" if user_id else ""
 
-            # Check cache first (if enabled)
-            cached_result = self.cache.get_cached_query_result(question, document_name, suffix=cache_key_suffix)
+            # Check cache first (if enabled) - use first document for cache key
+            cache_doc_key = document_names[0] if document_names else None
+            cached_result = self.cache.get_cached_query_result(question, cache_doc_key, suffix=cache_key_suffix)
             if cached_result:
                 self.logger.info("Returning cached result")
                 cached_result['cached'] = True
                 return cached_result
 
-            # Retrieve relevant documents with user filtering
+            # Retrieve relevant documents with user filtering and multiple document filter
             retrieval_results = self.retriever.retrieve(
-                question, conversation_history, document_filter=document_name, user_id=user_id)
+                question, conversation_history, document_filter=document_names, user_id=user_id)
 
             if not retrieval_results['results']:
                 return {
@@ -268,7 +276,7 @@ class RAGSystem:
             # ON-DEMAND IMAGE EXTRACTION: If question asks about images/figures, extract them now
             if self._needs_image_extraction(question):
                 self.logger.info("🖼️ Image-related query detected - extracting images on-demand")
-                retrieval_results = self._enrich_with_images(retrieval_results, document_name, user_id)
+                retrieval_results = self._enrich_with_images(retrieval_results, document_names, user_id)
 
             # Generate response
             response = self.llm_handler.generate_response(
@@ -286,7 +294,7 @@ class RAGSystem:
             response['cached'] = False
 
             # Cache the result (if enabled) with user_id suffix
-            self.cache.cache_query_result(question, document_name, response, ttl=self.config.QUERY_CACHE_TTL, suffix=cache_key_suffix)
+            self.cache.cache_query_result(question, cache_doc_key, response, ttl=self.config.QUERY_CACHE_TTL, suffix=cache_key_suffix)
 
             return response
 
@@ -300,7 +308,7 @@ class RAGSystem:
             }
 
     def query_stream(self, question: str, conversation_history: List[str] = None,
-                     document_name: str = None, user_id: str = None):
+                     document_names: List[str] = None, document_name: str = None, user_id: str = None):
         """
         Stream query response for real-time UX
 
@@ -312,18 +320,25 @@ class RAGSystem:
         Args:
             question: User question
             conversation_history: Previous conversation messages
-            document_name: Optional document filter
+            document_names: Optional multiple document filter
+            document_name: Optional single document filter (backward compatibility)
             user_id: User identifier for multi-tenancy
 
         Yields:
             Dict with 'type' ('context', 'chunk', 'done', 'error'), 'content', etc.
         """
+        # Backward compatibility: convert single document_name to list
+        if document_name and not document_names:
+            document_names = [document_name]
+
         try:
             self.logger.info(f"Streaming query: {question} (user: {user_id})")
+            if document_names:
+                self.logger.info(f"Filtering to documents: {', '.join(document_names)}")
 
             # Step 1: Retrieve relevant documents (non-streaming)
             retrieval_results = self.retriever.retrieve(
-                question, conversation_history, document_filter=document_name, user_id=user_id
+                question, conversation_history, document_filter=document_names, user_id=user_id
             )
 
             if not retrieval_results['results']:

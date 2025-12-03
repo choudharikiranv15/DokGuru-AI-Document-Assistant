@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 import { useDocumentStore } from '../stores/documentStore'
 import { useChatStore } from '../stores/chatStore'
-import VoicePreferences from '../components/settings/VoicePreferences'
 import AccountManagement from '../components/settings/AccountManagement'
 import UsageDashboard from '../components/dashboard/UsageDashboard'
 import DownloadHistory from '../components/chat/DownloadHistory'
@@ -519,15 +518,15 @@ export default function Profile() {
                         <UsageDashboard />
                     </motion.div>
 
-                    {/* Voice Preferences */}
-                    <motion.div
+                    {/* Voice Preferences - Commented out temporarily */}
+                    {/* <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.9, duration: 0.6 }}
                         className="mb-6"
                     >
                         <VoicePreferences />
-                    </motion.div>
+                    </motion.div> */}
 
                     {/* Download Chat History (Phase 2) */}
                     <motion.div

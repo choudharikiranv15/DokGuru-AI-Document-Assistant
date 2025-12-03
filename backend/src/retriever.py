@@ -9,9 +9,15 @@ class SmartRetriever:
         self.vector_store = vector_store
         self.config = config
         
-    def retrieve(self, query: str, context_history: List[str] = None, document_filter: str = None, user_id: str = None) -> Dict[str, Any]:
-        """Intelligent retrieval with context awareness and user filtering"""
+    def retrieve(self, query: str, context_history: List[str] = None, document_filter = None, user_id: str = None) -> Dict[str, Any]:
+        """Intelligent retrieval with context awareness and user filtering
 
+        Args:
+            query: Search query
+            context_history: Previous conversation context
+            document_filter: Single document name (str) or list of document names ([str]) to filter by
+            user_id: User ID for multi-tenancy
+        """
         # Enhance query with context if available
         enhanced_query = self._enhance_query_with_context(query, context_history)
 
@@ -19,6 +25,7 @@ class SmartRetriever:
         query_type = self._detect_query_type(query)
 
         # Perform search with user filtering (ChromaDB returns nested lists)
+        # document_filter can be str or List[str]
         search_results = self.vector_store.search(
             enhanced_query,
             n_results=self.config.TOP_K_RESULTS * 2,  # Get more for filtering
