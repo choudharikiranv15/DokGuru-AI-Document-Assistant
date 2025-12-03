@@ -107,6 +107,10 @@ jobs:
         run: |
           # Deploy with --update-env-vars to preserve existing env vars
           # This allows manually added vars (like ADMIN_SETUP_KEY) to persist
+
+          # Set CORS origins as variable to avoid gcloud parsing issues with dots
+          CORS_VALUE="https://dokguru.in,https://www.dokguru.in,https://dokguru.vercel.app"
+
           gcloud run deploy ${{ env.SERVICE }} \
             --source backend/ \
             --region ${{ env.REGION }} \
@@ -137,8 +141,8 @@ jobs:
             --update-env-vars "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" \
             --update-env-vars "POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }}" \
             --update-env-vars "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" \
-            --update-env-vars FRONTEND_URL=https://dokguru.in \
-            --update-env-vars CORS_ORIGINS="https://dokguru.in,https://www.dokguru.in,https://dokguru.vercel.app"
+            --update-env-vars "FRONTEND_URL=https://dokguru.in" \
+            --update-env-vars "CORS_ORIGINS=${CORS_VALUE}"
 
       - name: Set Google Cloud TTS credentials
         run: |
