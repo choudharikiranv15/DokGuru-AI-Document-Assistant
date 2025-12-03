@@ -107,10 +107,6 @@ jobs:
         run: |
           # Deploy with --update-env-vars to preserve existing env vars
           # This allows manually added vars (like ADMIN_SETUP_KEY) to persist
-
-          # Set CORS origins as variable to avoid gcloud parsing issues with dots
-          CORS_VALUE="https://dokguru.in,https://www.dokguru.in,https://dokguru.vercel.app"
-
           gcloud run deploy ${{ env.SERVICE }} \
             --source backend/ \
             --region ${{ env.REGION }} \
@@ -140,9 +136,25 @@ jobs:
             --update-env-vars "REDIS_URL=${{ secrets.REDIS_URL }}" \
             --update-env-vars "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" \
             --update-env-vars "POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }}" \
-            --update-env-vars "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" \
-            --update-env-vars "FRONTEND_URL=https://dokguru.in" \
-            --update-env-vars "CORS_ORIGINS=${CORS_VALUE}"
+            --update-env-vars "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}"
+
+      - name: Update CORS configuration
+        run: |
+          # Update CORS and FRONTEND_URL separately using env file to avoid parsing issues
+          # Create temporary env vars file with proper escaping
+          cat > /tmp/env-vars.yaml <<EOF
+          FRONTEND_URL: "https://dokguru.in"
+          CORS_ORIGINS: "https://dokguru.in,https://www.dokguru.in,https://dokguru.vercel.app"
+          EOF
+
+          # Update service with env file (preserves all existing env vars)
+          gcloud run services update ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} \
+            --project ${{ env.PROJECT_ID }} \
+            --env-vars-file /tmp/env-vars.yaml
+
+          # Cleanup
+          rm /tmp/env-vars.yaml
 
       - name: Set Google Cloud TTS credentials
         run: |
