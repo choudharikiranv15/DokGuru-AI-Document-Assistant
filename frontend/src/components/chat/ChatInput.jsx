@@ -39,13 +39,38 @@ export default function ChatInput({ setIsThinking }) {
     // Chat history functions
     const saveChatHistory = useChatHistoryStore(state => state.saveChatHistory)
     const currentChatId = useChatHistoryStore(state => state.currentChatId)
+    const canCreateNewChat = useChatHistoryStore(state => state.canCreateNewChat)
+    const getRemainingChats = useChatHistoryStore(state => state.getRemainingChats)
+    const planLimits = useChatHistoryStore(state => state.planLimits)
 
-    // Check if input should be blocked
-    const isInputBlocked = loading || isStreaming || isPlayingAudio
+    // Check if we can send messages (must have an active chat OR ability to create one)
+    const chatLimitReached = !currentChatId && !canCreateNewChat()
+
+    // Check if current chat has reached query limit
+    const userMessageCount = messages.filter(m => m.role === 'user').length
+    const isPro = planLimits?.plan === 'pro' || planLimits?.plan === 'premium' || planLimits?.plan === 'enterprise'
+    // Use fetched limit from backend, fallback to defaults if not available
+    const maxQueriesPerChat = planLimits?.max_queries_per_chat !== undefined
+        ? planLimits.max_queries_per_chat
+        : (isPro ? -1 : (planLimits?.plan === 'basic' ? 200 : 50))
+    const queryLimitReached = currentChatId && maxQueriesPerChat !== -1 && userMessageCount >= maxQueriesPerChat
+
+    // Overall: blocked if loading, streaming, playing audio, OR (chat limit reached AND no active chat), OR query limit reached in current chat
+    const isInputBlocked = loading || isStreaming || isPlayingAudio || chatLimitReached || queryLimitReached
 
     // Auto-save chat history
     const autoSaveChatHistory = async () => {
         if (messages.length >= 2 && activeDocuments.length > 0 && !currentChatId) {
+            // Check if we can create a new chat before auto-saving
+            if (!canCreateNewChat()) {
+                console.warn('Cannot auto-save: chat limit reached')
+                toast.error('Chat limit reached! Your conversation was not saved. Please upgrade to Pro for unlimited chats.', {
+                    duration: 6000,
+                    icon: '⚠️'
+                })
+                return
+            }
+
             // Only auto-save if we have at least one Q&A pair and no existing chat ID
             // Save with first active document's name
             const firstDoc = activeDocuments[0]
@@ -53,6 +78,13 @@ export default function ChatInput({ setIsThinking }) {
                 await saveChatHistory(messages, firstDoc.name, firstDoc.id)
             } catch (error) {
                 console.error('Failed to auto-save chat:', error)
+                // If the error is about limits, show a clearer message
+                if (error.message && error.message.includes('limit')) {
+                    toast.error('Chat limit reached! Please upgrade to continue.', {
+                        duration: 5000,
+                        icon: '🔒'
+                    })
+                }
             }
         }
     }
@@ -75,6 +107,27 @@ export default function ChatInput({ setIsThinking }) {
             toast.error('Please select at least one document to query', {
                 duration: 4000,
                 icon: '☑️'
+            })
+            return
+        }
+
+        // Check if chat limit is reached and no active chat
+        if (chatLimitReached) {
+            const remaining = getRemainingChats()
+            const planType = planLimits?.plan || 'free'
+            toast.error(`Chat limit reached! You have ${remaining} chats remaining. Please load an existing chat or upgrade to Pro for unlimited chats.`, {
+                duration: 6000,
+                icon: '🔒'
+            })
+            return
+        }
+
+        // Check if current chat has reached query limit
+        if (queryLimitReached) {
+            const planType = planLimits?.plan || 'free'
+            toast.error(`Query limit reached! This chat has reached the maximum of ${maxQueriesPerChat} queries for ${planType} plan. Please start a new chat or upgrade to Pro for unlimited queries.`, {
+                duration: 6000,
+                icon: '🔒'
             })
             return
         }
@@ -436,6 +489,58 @@ export default function ChatInput({ setIsThinking }) {
     return (
         <div className="p-2 sm:p-4">
             <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-2 sm:space-y-3">
+                {/* Limit Reached Warning */}
+                {(chatLimitReached || queryLimitReached) && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-gradient-to-r from-amber-500/10 to-red-500/10 border border-amber-500/30 rounded-lg p-4 backdrop-blur-sm"
+                    >
+                        <div className="flex items-start gap-3">
+                            <svg className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            <div className="flex-1">
+                                {queryLimitReached ? (
+                                    <>
+                                        <h3 className="text-amber-400 font-semibold mb-1">Query Limit Reached</h3>
+                                        <p className="text-sm text-gray-300 mb-3">
+                                            This chat has reached the maximum of {maxQueriesPerChat} queries for {planLimits?.plan || 'free'} plan.
+                                            {canCreateNewChat() ? (
+                                                <> Please click "New Chat" above to start a fresh conversation, or upgrade to Pro for unlimited queries per chat.</>
+                                            ) : (
+                                                <> You've also reached your chat limit ({planLimits?.limit || 5} chats). Please upgrade to Pro to continue.</>
+                                            )}
+                                        </p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <h3 className="text-amber-400 font-semibold mb-1">Chat Limit Reached</h3>
+                                        <p className="text-sm text-gray-300 mb-3">
+                                            You've reached your chat limit ({planLimits?.limit || 5} chats for {planLimits?.plan || 'free'} plan).
+                                            Please load an existing chat from the sidebar to continue, or upgrade to Pro for unlimited chats.
+                                        </p>
+                                    </>
+                                )}
+                                <div className="flex gap-2">
+                                    <motion.button
+                                        whileHover={{ scale: 1.02 }}
+                                        whileTap={{ scale: 0.98 }}
+                                        type="button"
+                                        onClick={() => {
+                                            // Navigate to profile/upgrade page
+                                            window.location.href = '/profile'
+                                        }}
+                                        className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-cyan-500/30"
+                                    >
+                                        Upgrade to Pro
+                                    </motion.button>
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+
                 {/* Streaming Status Bar */}
                 {(isStreaming || isPlayingAudio) && audioQueue.length > 0 && (
                     <motion.div
@@ -566,8 +671,8 @@ export default function ChatInput({ setIsThinking }) {
 
                     {/* Text Input with integrated Voice Button */}
                     <div className="flex-1 relative min-w-0">
-                        {/* Lock Icon - shown when no documents */}
-                        {(!documents || documents.length === 0) && (
+                        {/* Lock Icon - shown when no documents, chat limit reached, or query limit reached */}
+                        {((!documents || documents.length === 0) || chatLimitReached || queryLimitReached) && (
                             <div className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
                                 <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -582,16 +687,18 @@ export default function ChatInput({ setIsThinking }) {
                             placeholder={
                                 isListening ? "" :
                                     (!documents || documents.length === 0) ? "🔒 Upload a PDF document first to unlock chat..." :
+                                        queryLimitReached ? "🔒 Query limit reached! Start a new chat or upgrade to Pro..." :
+                                        chatLimitReached ? "🔒 Chat limit reached! Load an existing chat or upgrade to Pro..." :
                                         (isStreaming ? "Streaming..." :
                                             (isPlayingAudio ? "Audio playing..." :
                                                 "Ask a question..."))
                             }
                             disabled={isInputBlocked || isListening || !documents || documents.length === 0}
-                            className={`w-full py-2.5 sm:py-3 bg-white/5 backdrop-blur-sm border border-white/10 rounded-full focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-white placeholder-gray-500 transition-all duration-200 text-sm ${(!documents || documents.length === 0)
+                            className={`w-full py-2.5 sm:py-3 bg-white/5 backdrop-blur-sm border border-white/10 rounded-full focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-white placeholder-gray-500 transition-all duration-200 text-sm ${(!documents || documents.length === 0 || chatLimitReached || queryLimitReached)
                                 ? 'pl-10 sm:pl-12 pr-10 sm:pr-12 opacity-60 cursor-not-allowed'
                                 : 'pl-3 sm:pl-4 pr-10 sm:pr-12 disabled:opacity-50'
                                 }`}
-                            title={(!documents || documents.length === 0) ? "Please upload a document first" : ""}
+                            title={(!documents || documents.length === 0) ? "Please upload a document first" : queryLimitReached ? "Query limit reached - start a new chat or upgrade" : chatLimitReached ? "Chat limit reached - load an existing chat or upgrade" : ""}
                         />
 
                         {/* Recording Indicator */}
@@ -616,13 +723,15 @@ export default function ChatInput({ setIsThinking }) {
                         <button
                             type="button"
                             onClick={toggleVoiceRecording}
-                            disabled={loading || !documents || documents.length === 0}
+                            disabled={loading || !documents || documents.length === 0 || chatLimitReached || queryLimitReached}
                             className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 ${isListening
                                 ? 'bg-red-500 hover:bg-red-600 animate-pulse text-white'
                                 : 'bg-white/10 hover:bg-white/20 text-cyan-400'
                                 }`}
                             title={
                                 (!documents || documents.length === 0) ? "Upload a document first" :
+                                    queryLimitReached ? "Query limit reached - start a new chat or upgrade" :
+                                    chatLimitReached ? "Chat limit reached - load an existing chat or upgrade" :
                                     (isListening ? "Stop listening" : "Start voice input")
                             }
                         >
@@ -658,7 +767,7 @@ export default function ChatInput({ setIsThinking }) {
                             type="submit"
                             disabled={!input.trim() || isInputBlocked || isListening || !documents || documents.length === 0}
                             className="p-2.5 sm:p-3 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-cyan-500/30 flex-shrink-0"
-                            title={(!documents || documents.length === 0) ? "Upload a document first" : "Send message"}
+                            title={(!documents || documents.length === 0) ? "Upload a document first" : queryLimitReached ? "Query limit reached - start a new chat or upgrade" : chatLimitReached ? "Chat limit reached - load an existing chat or upgrade" : "Send message"}
                         >
                             {loading ? (
                                 <svg className="animate-spin h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24">

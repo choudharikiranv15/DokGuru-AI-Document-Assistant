@@ -197,9 +197,11 @@ csp = {
 # CORS Configuration - MUST be initialized BEFORE Talisman (non-fatal)
 # Otherwise Talisman intercepts OPTIONS preflight requests
 
-# Define allowed origins at module level - Vercel frontend + localhost for development
+# Define allowed origins at module level - Custom domain + Vercel frontend + localhost for development
 ALLOWED_ORIGINS = [
-    'https://dokguru.vercel.app',  # Production frontend on Vercel
+    'https://dokguru.in',  # Production custom domain
+    'https://www.dokguru.in',  # www subdomain for custom domain
+    'https://dokguru.vercel.app',  # Production frontend on Vercel (backup)
     'https://www.dokguru.vercel.app',  # www subdomain variant
     'https://dokguru-backend-739437500880.asia-south1.run.app',  # Cloud Run backend
     'http://localhost:5173',  # Vite dev server

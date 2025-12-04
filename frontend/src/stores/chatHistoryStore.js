@@ -8,7 +8,7 @@ export const useChatHistoryStore = create((set, get) => ({
     currentChatId: null, // Currently active chat ID
     loading: false,
     error: null,
-    planLimits: null, // Store plan limits
+    planLimits: null, // Store plan limits (includes limit, plan, and detailed limits)
     autoSaveEnabled: true, // Auto-save current chat
 
     // Fetch all chat histories for the current user
@@ -16,9 +16,23 @@ export const useChatHistoryStore = create((set, get) => ({
         set({ loading: true, error: null })
         try {
             const data = await api.getChatHistories()
+
+            // Fetch detailed plan limits
+            let detailedLimits = {}
+            try {
+                const limitsData = await api.getPlanLimits()
+                detailedLimits = limitsData.limits || {}
+            } catch (error) {
+                console.warn('Failed to fetch detailed plan limits:', error)
+            }
+
             set({
                 chatHistories: data.chats,
-                planLimits: { limit: data.limit, plan: data.plan },
+                planLimits: {
+                    limit: data.limit,
+                    plan: data.plan,
+                    ...detailedLimits // Include max_queries_per_chat, max_documents, etc.
+                },
                 loading: false
             })
 
