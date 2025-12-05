@@ -333,6 +333,28 @@ class SupabaseVectorStore:
                 'distances': [[]]
             }
 
+    def get_document_text(self, document_name: str, user_id: str = None, with_page_numbers: bool = False) -> str:
+        """Retrieve full text of a document (sorted by page)"""
+        try:
+            query = self.client.table(self.table_name).select('content, page_number').eq('document_name', document_name)
+            
+            if user_id:
+                query = query.eq('user_id', user_id)
+                
+            # Order by page number and chunk index
+            result = query.order('page_number').order('chunk_index').execute()
+            
+            if not result.data:
+                return ""
+            
+            if with_page_numbers:
+                return "\n\n".join([f"{row.get('content', '')} [Page {row.get('page_number', 0)}]" for row in result.data])
+            else:
+                return "\n\n".join([row.get('content', '') for row in result.data])
+        except Exception as e:
+            self.logger.error(f"Failed to get document text: {e}")
+            return ""
+
     def delete_document(self, document_name: str, user_id: str = None) -> Dict[str, Any]:
         """
         Delete a specific document for a user

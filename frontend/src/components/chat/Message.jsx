@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm'
 import { textToSpeech } from '../../services/api'
 import { toast } from 'react-hot-toast'
 import api from '../../services/api'
+import MermaidRenderer from '../documents/MermaidRenderer'
 
 function Message({ message }) {
     const isUser = message.role === 'user'
@@ -247,13 +248,25 @@ function Message({ message }) {
                                         <td className="px-4 py-2 text-sm text-gray-200" {...props} />
                                     ),
 
-                                    // Code
-                                    code: ({ node, inline, ...props }) =>
-                                        inline ? (
-                                            <code className="bg-gray-800 text-pink-400 px-1.5 py-0.5 rounded text-sm font-mono break-all max-w-full" {...props} />
+                                    // Code - ENHANCED with Mermaid Support
+                                    code: ({ node, inline, className, children, ...props }) => {
+                                        const match = /language-(\w+)/.exec(className || '')
+                                        const language = match ? match[1] : ''
+                                        
+                                        if (!inline && language === 'mermaid') {
+                                            return <MermaidRenderer chart={String(children).replace(/\n$/, '')} />
+                                        }
+                                        
+                                        return inline ? (
+                                            <code className="bg-gray-800 text-pink-400 px-1.5 py-0.5 rounded text-sm font-mono break-all max-w-full" {...props}>
+                                                {children}
+                                            </code>
                                         ) : (
-                                            <code className="block bg-gray-900 text-gray-100 p-2 sm:p-4 rounded-lg overflow-x-auto text-xs sm:text-sm font-mono mb-3 whitespace-pre max-w-full scrollbar-thin scrollbar-thumb-cyan-500/20 scrollbar-track-transparent" {...props} />
-                                        ),
+                                            <code className="block bg-gray-900 text-gray-100 p-2 sm:p-4 rounded-lg overflow-x-auto text-xs sm:text-sm font-mono mb-3 whitespace-pre max-w-full scrollbar-thin scrollbar-thumb-cyan-500/20 scrollbar-track-transparent" {...props}>
+                                                {children}
+                                            </code>
+                                        )
+                                    },
                                     pre: ({ node, ...props }) => (
                                         <pre className="bg-gray-900 rounded-lg overflow-x-auto mb-3 max-w-full scrollbar-thin scrollbar-thumb-cyan-500/20 scrollbar-track-transparent" {...props} />
                                     ),
@@ -458,6 +471,28 @@ function Message({ message }) {
                         </AnimatePresence>
                     )}
 
+                    {/* Citations / Sources */}
+                    {!isUser && message.metadata?.sources && message.metadata.sources.length > 0 && (
+                         <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="mt-3 pt-3 border-t border-white/10"
+                        >
+                            <p className="text-xs font-semibold text-gray-400 mb-2">Sources:</p>
+                            <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
+                                {message.metadata.sources.map((source, idx) => (
+                                    <div key={idx} className="bg-white/5 rounded p-2 text-xs border border-white/5 hover:border-cyan-500/30 transition-colors">
+                                        <div className="flex justify-between items-start mb-1">
+                                            <span className="text-cyan-400 font-medium truncate max-w-[70%]" title={source.document}>{source.document}</span>
+                                            <span className="text-gray-500 bg-white/5 px-1.5 rounded">p. {source.page}</span>
+                                        </div>
+                                        <p className="text-gray-400 line-clamp-2 italic">"{source.text}"</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+
                     {/* Feedback Buttons for AI Messages */}
                     {!isUser && (
                         <motion.div
@@ -516,5 +551,6 @@ export default memo(Message, (prevProps, nextProps) => {
            prevProps.message.audioUrl === nextProps.message.audioUrl &&
            prevProps.message.audioReady === nextProps.message.audioReady &&
            prevProps.message.streaming === nextProps.message.streaming &&
-           prevProps.message.streamingGenerated === nextProps.message.streamingGenerated
+           prevProps.message.streamingGenerated === nextProps.message.streamingGenerated &&
+           JSON.stringify(prevProps.message.metadata) === JSON.stringify(nextProps.message.metadata)
 })

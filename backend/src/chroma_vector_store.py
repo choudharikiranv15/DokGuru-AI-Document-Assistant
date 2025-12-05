@@ -120,7 +120,7 @@ class ChromaVectorStore:
             self.logger.error(f"Failed to add documents: {e}")
             return {'success': False, 'error': str(e)}
 
-    def search(self, query: str, n_results: int = 5, document_filter: str = None, user_id: str = None) -> Dict[str, Any]:
+    def search(self, query: str, n_results: int = 5, document_filter: Any = None, user_id: str = None) -> Dict[str, Any]:
         """Search for relevant documents using semantic similarity with optional user filtering"""
         try:
             # Check if collection is empty
@@ -136,23 +136,30 @@ class ChromaVectorStore:
             query_embedding = self._generate_embeddings([query])[0]
 
             # Build filter with user_id and optional document name
-            where_filter = None
+            where_filter = {}
+            conditions = []
 
-            if user_id and document_filter:
-                # Use $and operator for multiple conditions
-                where_filter = {
-                    "$and": [
-                        {"user_id": user_id},
-                        {"document_name": document_filter}
-                    ]
-                }
-                self.logger.info(f"Filtering search to user: {user_id} AND document: {document_filter}")
-            elif user_id:
-                where_filter = {"user_id": user_id}
-                self.logger.info(f"Filtering search to user: {user_id}")
-            elif document_filter:
-                where_filter = {"document_name": document_filter}
-                self.logger.info(f"Filtering search to document: {document_filter}")
+            if user_id:
+                conditions.append({"user_id": user_id})
+
+            if document_filter:
+                if isinstance(document_filter, list):
+                    if len(document_filter) > 1:
+                        conditions.append({"document_name": {"$in": document_filter}})
+                    elif len(document_filter) == 1:
+                        conditions.append({"document_name": document_filter[0]})
+                else:
+                    conditions.append({"document_name": document_filter})
+
+            if len(conditions) > 1:
+                where_filter = {"$and": conditions}
+            elif len(conditions) == 1:
+                where_filter = conditions[0]
+            else:
+                where_filter = None
+
+            if where_filter:
+                self.logger.info(f"Search filter: {where_filter}")
 
             # Search ChromaDB
             results = self.collection.query(
@@ -172,6 +179,40 @@ class ChromaVectorStore:
                 'metadatas': [[]],
                 'distances': [[]]
             }
+
+    def get_document_text(self, document_name: str, user_id: str = None, with_page_numbers: bool = False) -> str:
+        """Retrieve full text of a document (sorted by page)"""
+        try:
+            where_filter = {"document_name": document_name}
+            if user_id:
+                where_filter = {"$and": [{"user_id": user_id}, {"document_name": document_name}]}
+            
+            results = self.collection.get(where=where_filter, include=['documents', 'metadatas'])
+            
+            if not results['documents']:
+                return ""
+                
+            # Combine text and metadata
+            chunks = []
+            for i, text in enumerate(results['documents']):
+                meta = results['metadatas'][i]
+                # Handle potential None or string page numbers
+                try:
+                    page = int(meta.get('page_number', 0))
+                except:
+                    page = 0
+                chunks.append({'text': text, 'page': page})
+                
+            # Sort by page
+            chunks.sort(key=lambda x: x['page'])
+            
+            if with_page_numbers:
+                return "\n\n".join([f"{c['text']} [Page {c['page']}]" for c in chunks])
+            else:
+                return "\n\n".join([c['text'] for c in chunks])
+        except Exception as e:
+            self.logger.error(f"Failed to get document text: {e}")
+            return ""
 
     def delete_document(self, document_name: str, user_id: str = None) -> Dict[str, Any]:
         """Delete all chunks from a specific document, optionally filtered by user"""

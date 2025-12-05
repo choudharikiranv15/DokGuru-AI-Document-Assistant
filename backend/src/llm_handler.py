@@ -125,8 +125,18 @@ class LLMHandler:
             self.conversation_history.append(f"User: {query}")
             self.conversation_history.append(f"Assistant: {answer}")
             
+            # Prepare sources for frontend
+            sources = []
+            for doc in context_docs[:3]: # Limit to top 3 relevant sources
+                sources.append({
+                    'page': doc['metadata'].get('page_number', '?'),
+                    'document': doc['metadata'].get('document_name', 'Unknown'),
+                    'text': doc['content'][:150] + "..." # Snippet
+                })
+
             return {
                 'answer': answer,
+                'sources': sources, # structured sources for UI citations
                 'sources_used': len(context_docs),
                 'context_types': list(set([doc['metadata']['chunk_type'] for doc in context_docs])),
                 'confidence': self._calculate_confidence(context_docs),
@@ -142,6 +152,171 @@ class LLMHandler:
                 'confidence': 0.0
             }
     
+    def generate_summary(self, text: str) -> str:
+        """Generate a summary of the provided text"""
+        # Truncate text to fit in context (approx 15k chars ~ 3-4k tokens)
+        truncated_text = text[:15000]
+        
+        prompt = f"""Summarize the following document content in a concise and structured manner (bullet points).
+Focus on the main concepts, key takeaways, and any important conclusions.
+
+CONTENT:
+{truncated_text}
+
+... [truncated] ...
+
+SUMMARY:"""
+
+        try:
+            if self.fallback_handler:
+                 result = self.fallback_handler.query_text(
+                    question=prompt,
+                    system_prompt="You are an expert synthesizer of information. Create clear, structured summaries.",
+                    max_tokens=1500
+                )
+                 return result['answer'] if result['success'] else "Failed to generate summary."
+            
+            if not self.client:
+                return "No LLM provider available."
+
+            # Fallback to direct
+            response = self.client.chat.completions.create(
+                model=self.config.LLM_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are an expert synthesizer of information. Create clear, structured summaries."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=1500
+            )
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            self.logger.error(f"Error generating summary: {e}")
+            return "An error occurred while generating the summary."
+
+    def generate_flashcards(self, text: str, num_cards: int = 5) -> List[Dict[str, str]]:
+        """Generate flashcards from text"""
+        import json
+        import re
+
+        # Truncate text to fit in context
+        truncated_text = text[:15000]
+        
+        prompt = f"""Create {num_cards} high-quality flashcards based on the following content.
+Format your response as a RAW JSON array of objects, where each object has:
+- "front": The question or concept
+- "back": The answer or definition
+- "page_number": The page number (integer) where this information was found (extracted from the [Page X] markers in the text). If unsure, use null.
+
+Do NOT use Markdown formatting (no ```json or ```). Just return the raw JSON array.
+
+CONTENT:
+{truncated_text}
+
+... [truncated] ...
+
+JSON RESPONSE:"""
+
+        try:
+            response_text = ""
+            if self.fallback_handler:
+                 result = self.fallback_handler.query_text(
+                    question=prompt,
+                    system_prompt="You are an educational tool generator. Output only valid JSON.",
+                    max_tokens=2000
+                )
+                 if result['success']:
+                     response_text = result['answer']
+            
+            if not response_text and self.client:
+                response = self.client.chat.completions.create(
+                    model=self.config.LLM_MODEL,
+                    messages=[
+                        {"role": "system", "content": "You are an educational tool generator. Output only valid JSON."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=2000
+                )
+                response_text = response.choices[0].message.content
+
+            if not response_text:
+                return []
+
+            # Clean up response (remove markdown if present)
+            clean_text = re.sub(r'```json\s*', '', response_text)
+            clean_text = re.sub(r'```\s*', '', clean_text)
+            clean_text = clean_text.strip()
+            
+            return json.loads(clean_text)
+            
+        except Exception as e:
+            self.logger.error(f"Error generating flashcards: {e}")
+            return []
+
+    def generate_roadmap(self, text: str) -> str:
+        """Generate a Mermaid.js roadmap/mindmap"""
+        import re
+        
+        # Truncate text
+        truncated_text = text[:15000]
+        
+        prompt = f"""Create a detailed and structured Mind Map for the following content using Mermaid.js syntax.
+Use the 'mindmap' diagram type.
+Start with `mindmap` and indentation.
+Ensure the syntax is valid. Do not use special characters that might break Mermaid.
+
+CONTENT:
+{truncated_text}
+
+... [truncated] ...
+
+Example Output Format:
+mindmap
+  root((Main Topic))
+    Subtopic 1
+      Detail A
+      Detail B
+    Subtopic 2
+      Detail C
+
+MERMAID CODE (Raw only):"""
+
+        try:
+            response_text = ""
+            if self.fallback_handler:
+                 result = self.fallback_handler.query_text(
+                    question=prompt,
+                    system_prompt="You are a visual learning expert. Output only valid Mermaid.js code.",
+                    max_tokens=1500
+                )
+                 if result['success']:
+                     response_text = result['answer']
+            
+            if not response_text and self.client:
+                response = self.client.chat.completions.create(
+                    model=self.config.LLM_MODEL,
+                    messages=[
+                        {"role": "system", "content": "You are a visual learning expert. Output only valid Mermaid.js code."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=1500
+                )
+                response_text = response.choices[0].message.content
+
+            if not response_text:
+                return "graph TD\nError[Failed to generate roadmap]"
+
+            # Clean up response (remove markdown)
+            clean_text = re.sub(r'```mermaid\s*', '', response_text)
+            clean_text = re.sub(r'```\s*', '', clean_text)
+            clean_text = clean_text.strip()
+            
+            return clean_text
+            
+        except Exception as e:
+            self.logger.error(f"Error generating roadmap: {e}")
+            return "graph TD\nError[Error generating roadmap]"
+
     def _prepare_context(self, context_docs: List[Dict[str, Any]]) -> str:
         """Prepare context from retrieved documents with smart truncation"""
         context_parts = []
@@ -190,51 +365,23 @@ class LLMHandler:
         return "CONVERSATION HISTORY:\n" + "\n".join(conversation_history[-6:])  # Last 3 exchanges
     
     def _create_prompt(self, query: str, context_text: str, conversation_context: str) -> str:
-        """Create the complete prompt (optimized for low token count)"""
-        # Detect if question is document-specific or general knowledge
-        is_document_specific = self._is_document_specific_query(query)
-
-        if is_document_specific:
-            # Document-only mode
-            prompt = f"""CONTEXT:
+        """Create the complete prompt (optimized for transparency)"""
+        prompt = f"""CONTEXT:
 {context_text}
 
 QUESTION: {query}
 
-Answer using ONLY the context above. If not found, say: "I cannot find this information in the uploaded document(s)."
+INSTRUCTIONS:
+1. Answer the question using ONLY the provided CONTEXT above.
+2. If the answer is found in the context, provide it directly and concisely.
+3. If the answer is NOT found in the context, YOU MUST START YOUR RESPONSE WITH:
+   "⚠️ **Note:** This information is not found in your uploaded document, so I am using my general knowledge to answer."
+   Then provide the answer to the best of your ability.
+
+4. Do NOT mention "the document" or "the context" in your answer unless necessary. Just state the facts.
 """
-        else:
-            # General knowledge mode
-            prompt = f"""CONTEXT (if relevant):
-{context_text}
-
-QUESTION: {query}
-
-This is a general knowledge question. Answer using your knowledge first. Reference documents only if relevant.
-"""
-
         return prompt
 
-    def _is_document_specific_query(self, query: str) -> bool:
-        """Detect if query is asking about document content specifically"""
-        query_lower = query.lower()
-
-        # Document-specific indicators
-        document_indicators = [
-            'in the document', 'in my document', 'in this document',
-            'according to', 'what does the document say',
-            'from the document', 'in the pdf', 'in my pdf',
-            'the document mentions', 'document states',
-            'extract from', 'find in document'
-        ]
-
-        # If any document-specific phrase is found, it's a document query
-        if any(indicator in query_lower for indicator in document_indicators):
-            return True
-
-        # Otherwise, treat as general knowledge query
-        return False
-    
     def _get_system_prompt(self) -> str:
         """Get system prompt for the LLM"""
         return """You are a friendly and knowledgeable tutor. Answer questions naturally and directly.
@@ -242,6 +389,21 @@ This is a general knowledge question. Answer using your knowledge first. Referen
 RESPONSE MODES:
 1. For GENERAL KNOWLEDGE questions: Use your knowledge to give accurate, helpful answers
 2. For DOCUMENT-SPECIFIC questions: Answer strictly from the provided context
+
+VISUAL CONTENT RULES (Roadmaps & Diagrams):
+✅ You CAN generate visual diagrams using Mermaid.js.
+- If user asks for a "roadmap", "mind map", "flowchart", or "diagram":
+- Generate valid Mermaid.js code enclosed in a code block with the language identifier 'mermaid'.
+- For Roadmaps/Mind Maps: Use `mindmap` or `graph TD` (flowchart).
+- Keep diagrams clear and hierarchical.
+
+Example:
+```mermaid
+graph TD
+    A[Start] --> B{Is it working?}
+    B -- Yes --> C[Great!]
+    B -- No --> D[Fix it]
+```
 
 LANGUAGE RULES (CRITICAL - MUST FOLLOW):
 ⚠️ ALWAYS respect the user's language preference!

@@ -1405,6 +1405,72 @@ def get_upload_status(job_id):
         return jsonify({'success': False, 'message': str(e)}), 500
 
 
+@app.route('/documents/<document_name>/summary', methods=['GET'])
+@require_auth
+@limiter.limit("10 per hour")
+def get_document_summary(document_name):
+    """Get or generate a summary for a document"""
+    try:
+        user_id = request.user_id
+        # Decode document name if it was URL encoded
+        from urllib.parse import unquote
+        document_name = unquote(document_name)
+        
+        result = rag_system.summarize_document(document_name, user_id=user_id)
+        
+        if result.get('success'):
+            return jsonify(result)
+        else:
+            return jsonify(result), 404 if 'not found' in result.get('message', '').lower() else 500
+            
+    except Exception as e:
+        logger.error(f"Summary API error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/documents/<document_name>/flashcards', methods=['GET'])
+@require_auth
+@limiter.limit("10 per hour")
+def get_document_flashcards(document_name):
+    """Get or generate flashcards for a document"""
+    try:
+        user_id = request.user_id
+        from urllib.parse import unquote
+        document_name = unquote(document_name)
+        
+        result = rag_system.generate_flashcards(document_name, user_id=user_id)
+        
+        if result.get('success'):
+            return jsonify(result)
+        else:
+            return jsonify(result), 404 if 'not found' in result.get('message', '').lower() else 500
+            
+    except Exception as e:
+        logger.error(f"Flashcards API error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/documents/<document_name>/roadmap', methods=['GET'])
+@require_auth
+@limiter.limit("10 per hour")
+def get_document_roadmap(document_name):
+    """Get or generate a roadmap for a document"""
+    try:
+        user_id = request.user_id
+        from urllib.parse import unquote
+        document_name = unquote(document_name)
+        
+        result = rag_system.generate_roadmap(document_name, user_id=user_id)
+        
+        if result.get('success'):
+            return jsonify(result)
+        else:
+            return jsonify(result), 404 if 'not found' in result.get('message', '').lower() else 500
+            
+    except Exception as e:
+        logger.error(f"Roadmap API error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 # ============= END ASYNC UPLOAD ENDPOINTS =============
 
 
@@ -1531,7 +1597,8 @@ def ask_question():
                 'sources_used': response.get('sources_used', 0),
                 'confidence': response.get('confidence', 0),
                 'query_type': response.get('query_type', 'unknown'),
-                'cached': response.get('cached', False)
+                'cached': response.get('cached', False),
+                'sources': response.get('sources', [])
             },
             'limits': {
                 'queries_remaining': query_limit['remaining'],
@@ -1616,6 +1683,7 @@ def ask_question_stream():
                 audio_urls = []
                 tts_futures = {}  # {future: (sentence_id, sentence_text)}
                 pending_audio = queue.Queue()  # Thread-safe queue for completed audio
+                collected_sources = [] # Store sources to send in done event
 
                 def tts_worker(sentence_id, sentence_text, lang):
                     """Generate TTS in thread pool"""
@@ -1665,7 +1733,10 @@ def ask_question_stream():
                     for audio_result in check_completed_tts():
                         yield f"data: {json.dumps({'type': 'audio', 'sentence_id': audio_result['sentence_id'], 'audio_url': audio_result['audio_url'], 'duration': audio_result['duration']})}\n\n"
 
-                    if chunk_type == 'context':
+                    if chunk_type == 'sources':
+                        collected_sources = chunk.get('sources', [])
+
+                    elif chunk_type == 'context':
                         sources_used = chunk.get('sources_used', 0)
                         yield f"data: {json.dumps({'type': 'context', 'sources_used': sources_used})}\n\n"
 
@@ -1711,8 +1782,8 @@ def ask_question_stream():
                             except Exception as e:
                                 logger.warning(f"TTS completion error: {e}")
 
-                        # Send completion with all audio URLs
-                        yield f"data: {json.dumps({'type': 'done', 'full_response': full_response, 'sources_used': sources_used, 'total_sentences': sentence_count, 'audio_urls': audio_urls, 'provider': chunk.get('provider', 'unknown')})}\n\n"
+                        # Send completion with all audio URLs and sources
+                        yield f"data: {json.dumps({'type': 'done', 'full_response': full_response, 'sources_used': sources_used, 'sources': collected_sources, 'total_sentences': sentence_count, 'audio_urls': audio_urls, 'provider': chunk.get('provider', 'unknown')})}\n\n"
 
                         # Update conversation history
                         conversation_history.append(question)
