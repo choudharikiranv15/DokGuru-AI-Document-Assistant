@@ -85,9 +85,6 @@ jobs:
       contents: read
       id-token: write
 
-    env: # Define job-level environment variables
-      IMAGE_NAME: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -117,8 +114,8 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
-            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}:${{ github.sha }}
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -133,7 +130,7 @@ jobs:
 
       - name: Deploy new revision (no traffic yet)
         run: |
-          IMAGE_TAG=${{ env.IMAGE_NAME }}:${{ github.sha }}
+          IMAGE_TAG=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}:${{ github.sha }}
 
           gcloud run deploy ${{ env.SERVICE }} \
             --image "$IMAGE_TAG" \
@@ -212,5 +209,5 @@ jobs:
           echo "- New Revision: $NEW_REVISION" >> $GITHUB_STEP_SUMMARY
           echo "- Previous Revision: $PREV_REVISION" >> $GITHUB_STEP_SUMMARY
           echo "- Region: ${{ env.REGION }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Image: ${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- URL: ${{ env.SERVICE_URL }}" >> $GITHUB_STEP_SUMMARY
