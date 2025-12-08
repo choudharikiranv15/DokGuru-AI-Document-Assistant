@@ -1,5 +1,5 @@
 # app_flask.py - Flask interface for RAG System with Voice Support
-# Version: 2.1.0 - CI/CD Pipeline Test
+# Version: 2.1.1 - IAM Permissions Fixed
 from flask import Flask, render_template, request, jsonify, session, send_file, make_response, Response
 import re
 from flask_cors import CORS
