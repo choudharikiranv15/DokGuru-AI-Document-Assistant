@@ -199,9 +199,11 @@ csp = {
 
 # Define allowed origins at module level - Vercel frontend + localhost for development
 ALLOWED_ORIGINS = [
+    'https://dokguru.in',           # Production custom domain
+    'https://www.dokguru.in',       # Production custom domain (www)
     'https://dokguru.vercel.app',  # Production frontend on Vercel
     'https://www.dokguru.vercel.app',  # www subdomain variant
-    'https://dokguru-backend-739437500880.asia-south1.run.app',  # Cloud Run backend
+    'https://dokguru-backend-383828718978.asia-south2.run.app',  # Cloud Run backend (NEW)
     'http://localhost:5173',  # Vite dev server
     'http://localhost:5174',  # Vite dev server (alternate port)
     'http://localhost:3000',  # React dev server
@@ -243,8 +245,13 @@ def add_cors_headers(response):
     """Add CORS headers to every response as a fallback safety net"""
     origin = request.headers.get('Origin', '')
 
-    # Check if origin is in allowed list or matches pattern
-    if origin in ALLOWED_ORIGINS or origin.endswith('.vercel.app'):
+    # Helper to check if origin is allowed (Exact match OR Wildcard subdomain)
+    is_allowed = origin in ALLOWED_ORIGINS or \
+                 origin.endswith('.vercel.app') or \
+                 origin.endswith('.dokguru.in') or \
+                 origin.endswith('.run.app') # Allow all Cloud Run revisions
+
+    if is_allowed:
         response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
@@ -259,7 +266,14 @@ def handle_preflight():
     """Handle CORS preflight OPTIONS requests before they reach route handlers"""
     if request.method == 'OPTIONS':
         origin = request.headers.get('Origin', '')
-        if origin in ALLOWED_ORIGINS or origin.endswith('.vercel.app'):
+        
+        # Helper to check if origin is allowed
+        is_allowed = origin in ALLOWED_ORIGINS or \
+                     origin.endswith('.vercel.app') or \
+                     origin.endswith('.dokguru.in') or \
+                     origin.endswith('.run.app')
+
+        if is_allowed:
             response = app.make_default_options_response()
             response.headers['Access-Control-Allow-Origin'] = origin
             response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
