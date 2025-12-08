@@ -12,8 +12,8 @@ on:
       - 'backend/**'
 
 env:
-  PROJECT_ID: utilitarian-bee-479308-f9
-  REGION: asia-south1
+  PROJECT_ID: project-ef045ea2-1f6e-46ec-9d7
+  REGION: asia-south2
   SERVICE: dokguru-backend
 
 jobs:
