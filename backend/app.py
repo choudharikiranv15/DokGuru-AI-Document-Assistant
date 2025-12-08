@@ -3166,20 +3166,21 @@ def get_plan_limits_endpoint(current_user):
 
 # ============= END CHAT HISTORY API ENDPOINTS =============
 
+# ============= AUTO-RUN DATABASE MIGRATIONS =============
+# Run migrations on app startup (works with both direct python and gunicorn)
+try:
+    logger.info("Checking database migrations...")
+    from src.migrator import run_migrations
+    run_migrations()
+    logger.info("Database migrations completed successfully")
+except Exception as e:
+    logger.warning(f"Migration check failed: {e}")
+    logger.warning("Continuing with startup...")
+
 if __name__ == '__main__':
     print("=" * 70)
     print("dokguru Voice - Multimodal RAG System")
     print("=" * 70)
-
-    # Run database migrations automatically
-    print("\n[*] Checking database migrations...")
-    try:
-        from src.migrator import run_migrations
-        run_migrations()
-        print("[OK] Database migrations completed successfully\n")
-    except Exception as e:
-        print(f"[WARN] Migration check failed: {e}")
-        print("Continuing with startup...\n")
 
     print("Configuration:")
     print("  Voice Input: Groq Whisper STT (with fallbacks)")
