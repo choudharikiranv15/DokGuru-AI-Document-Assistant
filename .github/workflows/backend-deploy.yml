@@ -98,20 +98,20 @@ jobs:
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ env.PROJECT_ID }}
 
       - name: Build and push Docker image
         run: |
           cd backend
           gcloud builds submit \
             --tag ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}:${{ github.sha }} \
+            --project=${{ env.PROJECT_ID }} \
             --timeout=20m
 
           # Tag as latest
           gcloud container images add-tag \
             ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}:${{ github.sha }} \
             ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}:latest \
+            --project=${{ env.PROJECT_ID }} \
             --quiet
 
       # NEW: Capture current stable revision (before deploying)
