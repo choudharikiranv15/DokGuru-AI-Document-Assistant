@@ -20,7 +20,6 @@ env:
   REGION: asia-south2
   SERVICE: dokguru-backend
   AR_REPO: dokguru-backend-repo
-  IMAGE_NAME: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}
 
 jobs:
   test:
@@ -85,6 +84,9 @@ jobs:
     permissions:
       contents: read
       id-token: write
+
+    env: # Define job-level environment variables
+      IMAGE_NAME: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}
 
     steps:
       - name: Checkout
