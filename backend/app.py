@@ -199,6 +199,8 @@ csp = {
 
 # Define allowed origins at module level - Vercel frontend + localhost for development
 ALLOWED_ORIGINS = [
+    'https://dokguru.in',           # Production custom domain
+    'https://www.dokguru.in',       # Production custom domain (www)
     'https://dokguru.vercel.app',  # Production frontend on Vercel
     'https://www.dokguru.vercel.app',  # www subdomain variant
     'https://dokguru-backend-739437500880.asia-south1.run.app',  # Cloud Run backend
@@ -620,6 +622,7 @@ def signup():
         role = data.get('role', '').strip()  # student, professional, researcher, other
         institution = data.get('institution', '').strip()
         occupation = data.get('occupation', '').strip()
+        display_name = data.get('display_name', '').strip()
 
         # Validation
         if not email or not password:
@@ -637,7 +640,7 @@ def signup():
         password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
         # Create user
-        user = db.create_user(email, password_hash, role, institution, occupation)
+        user = db.create_user(email, password_hash, role, institution, occupation, display_name)
 
         # Generate JWT (new users are not admin by default)
         token = generate_jwt(user['id'], user['email'], user.get('is_admin', False))
@@ -654,6 +657,7 @@ def signup():
                 'id': user['id'],
                 'email': user['email'],
                 'role': user.get('role'),
+                'display_name': user.get('display_name'),
                 'is_admin': user.get('is_admin', False),
                 'institution': user.get('institution')
             }
@@ -723,6 +727,7 @@ def login():
             'user': {
                 'id': user['id'],
                 'email': user['email'],
+                'display_name': user.get('display_name'),
                 'role': user.get('role'),
                 'is_admin': user.get('is_admin', False),
                 'is_verified': user.get('is_verified', False)
@@ -749,6 +754,7 @@ def get_current_user():
             'user': {
                 'id': user['id'],
                 'email': user['email'],
+                'display_name': user.get('display_name'),
                 'is_admin': user.get('is_admin', False),
                 'role': user.get('role'),
                 'created_at': user['created_at'].isoformat() if hasattr(user['created_at'], 'isoformat') else str(user['created_at'])
@@ -834,6 +840,47 @@ def reset_password():
     except Exception as e:
         logger.error(f"Reset password error: {str(e)}")
         capture_exception(e, {'endpoint': 'reset_password'})
+        return jsonify({'success': False, 'message': 'An error occurred'}), 500
+
+
+@app.route('/auth/update-profile', methods=['PUT'])
+@require_auth
+def update_profile():
+    """Update user profile information"""
+    try:
+        user_id = request.user_id
+        data = request.json
+        
+        # Fields allowed to be updated
+        allowed_fields = ['display_name', 'full_name', 'phone_number', 'college_name', 'class_name', 'is_student']
+        updates = {k: v for k, v in data.items() if k in allowed_fields}
+        
+        if not updates:
+            return jsonify({'success': False, 'message': 'No valid fields to update'}), 400
+
+        success = db.update_user(user_id, updates)
+
+        if success:
+            # Return updated user data
+            updated_user = db.get_user_by_id(user_id)
+            return jsonify({
+                'success': True,
+                'message': 'Profile updated successfully',
+                'user': {
+                    'id': updated_user['id'],
+                    'email': updated_user['email'],
+                    'display_name': updated_user.get('display_name'),
+                    'role': updated_user.get('role'),
+                    'is_admin': updated_user.get('is_admin', False),
+                    'institution': updated_user.get('institution')
+                }
+            })
+        else:
+            return jsonify({'success': False, 'message': 'Failed to update profile'}), 500
+
+    except Exception as e:
+        logger.error(f"Update profile error: {str(e)}")
+        capture_exception(e, {'endpoint': 'update_profile'})
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
 
 
@@ -3131,9 +3178,10 @@ def delete_chat_history(chat_id):
 
 @app.route('/chat-history/clear-all', methods=['DELETE'])
 @require_auth
-def clear_all_chat_histories(current_user):
+def clear_all_chat_histories():
     """Delete all chat histories for the current user"""
     try:
+        user_id = request.user_id
         success = db.delete_all_chat_histories(user_id)
 
         if success:
@@ -3147,9 +3195,10 @@ def clear_all_chat_histories(current_user):
 
 @app.route('/chat-history/search', methods=['GET'])
 @require_auth
-def search_chat_histories(current_user):
+def search_chat_histories():
     """Search chat histories by content"""
     try:
+        user_id = request.user_id
         query = request.args.get('q', '')
 
         if not query:
@@ -3169,9 +3218,10 @@ def search_chat_histories(current_user):
 
 @app.route('/chat-history/filter', methods=['GET'])
 @require_auth
-def filter_chat_histories(current_user):
+def filter_chat_histories():
     """Filter chat histories by date range"""
     try:
+        user_id = request.user_id
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
 
@@ -3192,9 +3242,10 @@ def filter_chat_histories(current_user):
 
 @app.route('/plan/limits', methods=['GET'])
 @require_auth
-def get_plan_limits_endpoint(current_user):
+def get_plan_limits_endpoint():
     """Get current user's plan limits and usage"""
     try:
+        user_id = request.user_id
         from src.plans_config import get_plan_limits
 
         # Get user plan

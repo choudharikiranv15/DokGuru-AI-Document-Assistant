@@ -13,7 +13,7 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'temp-key-for-startup')
 
 # Configure CORS immediately for health checks and proxied requests
-cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://localhost:3000,https://dokguru.vercel.app').split(',')
+cors_origins = os.getenv('CORS_ORIGINS', 'https://dokguru.in,https://www.dokguru.in,http://localhost:5173,http://localhost:3000,https://dokguru.vercel.app').split(',')
 CORS(app, resources={
     r"/*": {
         "origins": cors_origins,
