@@ -220,3 +220,4 @@ jobs:
           echo "- Region: ${{ env.REGION }}" >> $GITHUB_STEP_SUMMARY
           echo "- Image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- URL: ${{ env.SERVICE_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Deployment successful" >> $GITHUB_STEP_SUMMARY
