@@ -11,13 +11,18 @@ on:
     paths:
       - 'backend/**'
 
+concurrency:
+  group: backend-deploy
+  cancel-in-progress: true
+
 env:
   PROJECT_ID: project-ef045ea2-1f6e-46ec-9d7
   REGION: asia-south2
   SERVICE: dokguru-backend
+  AR_REPO: dokguru-backend-repo
+  IMAGE_NAME: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}
 
 jobs:
-  # ==================== TEST JOB ====================
   test:
     name: Test Backend
     runs-on: ubuntu-latest
@@ -37,23 +42,19 @@ jobs:
         run: |
           cd backend
           python -m pip install --upgrade pip
-          # Use lightweight app requirements for CI (full deps installed via Dockerfile)
           pip install -r requirements-app.txt
           pip install pytest pytest-cov flake8
 
       - name: Lint with flake8
         run: |
           cd backend
-          # Stop build if there are Python syntax errors or undefined names
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Exit-zero treats all errors as warnings
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
         continue-on-error: true
 
       - name: Run unit tests
         run: |
           cd backend
-          # Create minimal test if none exist
           if [ ! -d "tests" ]; then
             mkdir -p tests
             echo "def test_placeholder(): assert True" > tests/test_placeholder.py
@@ -63,136 +64,151 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          SECRET_KEY: test-secret-key-for-ci
+          SECRET_KEY: test-secret-ci
 
       - name: Test app imports
         run: |
           cd backend
           python -c "from app import app; print('✅ App imports successfully')"
         env:
-          GROQ_API_KEY: test-key
+          GROQ_API_KEY: test
           SUPABASE_URL: https://test.supabase.co
-          SUPABASE_KEY: test-key
-          SECRET_KEY: test-secret
+          SUPABASE_KEY: test
+          SECRET_KEY: test
 
-  # ==================== DEPLOY JOB ====================
   deploy:
-    name: Deploy to Cloud Run
+    name: Deploy to Cloud Run (Safe rollout + Auto rollback)
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
 
     permissions:
       contents: read
-      id-token: write  # Required for Workload Identity Federation
+      id-token: write
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
-        id: auth
+      - name: Authenticate to Google Cloud (WIF)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Set up Cloud SDK
+      - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      - name: Deploy to Cloud Run
-        id: deploy
+      - name: Configure Docker for Artifact Registry
         run: |
-          # Deploy with --update-env-vars to preserve existing env vars
-          # This allows manually added vars (like ADMIN_SETUP_KEY) to persist
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Set up QEMU & buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # NEW: Capture current stable revision (before deploying)
+      - name: Get previous stable revision
+        run: |
+          PREV=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} \
+            --format="value(status.traffic[0].revisionName)")
+          echo "PREV_REVISION=$PREV" >> $GITHUB_ENV
+          echo "Previous stable revision: $PREV"
+
+      - name: Deploy new revision (no traffic yet)
+        run: |
+          IMAGE_TAG=${{ env.IMAGE_NAME }}:${{ github.sha }}
+
           gcloud run deploy ${{ env.SERVICE }} \
-            --source backend/ \
+            --image "$IMAGE_TAG" \
             --region ${{ env.REGION }} \
             --project ${{ env.PROJECT_ID }} \
+            --platform managed \
             --allow-unauthenticated \
+            --no-traffic \
             --memory 2Gi \
             --cpu 2 \
             --timeout 300 \
             --concurrency 10 \
             --port 8080 \
-            --update-env-vars "GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}" \
-            --update-env-vars "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
-            --update-env-vars "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" \
-            --update-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }}" \
-            --update-env-vars "SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}" \
-            --update-env-vars "SECRET_KEY=${{ secrets.SECRET_KEY }}" \
-            --update-env-vars "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" \
-            --update-env-vars "GOOGLE_API_KEY=${{ secrets.GEMINI_API_KEY }}" \
-            --update-env-vars "SAMBANOVA_API_KEY=${{ secrets.SAMBANOVA_API_KEY }}" \
-            --update-env-vars "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" \
-            --update-env-vars "HUGGINGFACE_API_TOKEN=${{ secrets.HUGGINGFACE_API_TOKEN }}" \
-            --update-env-vars "COHERE_API_KEY=${{ secrets.COHERE_API_KEY }}" \
-            --update-env-vars "CEREBRAS_API_KEY=${{ secrets.CEREBRAS_API_KEY }}" \
-            --update-env-vars "MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }}" \
-            --update-env-vars "UPSTASH_REDIS_REST_URL=${{ secrets.UPSTASH_REDIS_REST_URL }}" \
-            --update-env-vars "UPSTASH_REDIS_REST_TOKEN=${{ secrets.UPSTASH_REDIS_REST_TOKEN }}" \
-            --update-env-vars "REDIS_URL=${{ secrets.REDIS_URL }}" \
-            --update-env-vars "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" \
-            --update-env-vars "POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }}" \
-            --update-env-vars "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}"
+            --update-env-vars "GROQ_API_KEY=${{ secrets.GROQ_API_KEY }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }},DATABASE_URL=${{ secrets.DATABASE_URL }},SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }},SECRET_KEY=${{ secrets.SECRET_KEY }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},GOOGLE_API_KEY=${{ secrets.GEMINI_API_KEY }},SAMBANOVA_API_KEY=${{ secrets.SAMBANOVA_API_KEY }},OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }},HUGGINGFACE_API_TOKEN=${{ secrets.HUGGINGFACE_API_TOKEN }},COHERE_API_KEY=${{ secrets.COHERE_API_KEY }},CEREBRAS_API_KEY=${{ secrets.CEREBRAS_API_KEY }},MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }},UPSTASH_REDIS_REST_URL=${{ secrets.UPSTASH_REDIS_REST_URL }},UPSTASH_REDIS_REST_TOKEN=${{ secrets.UPSTASH_REDIS_REST_TOKEN }},REDIS_URL=${{ secrets.REDIS_URL }},SENTRY_DSN=${{ secrets.SENTRY_DSN }},POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }},RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}"
 
-      - name: Set Google Cloud TTS credentials
+          REV=$(gcloud run revisions list \
+            --service=${{ env.SERVICE }} \
+            --region=${{ env.REGION }} \
+            --limit=1 \
+            --sort-by=~metadata.creationTimestamp \
+            --format='value(metadata.name)')
+
+          echo "NEW_REVISION=$REV" >> $GITHUB_ENV
+
+      - name: Shift 10% traffic to new revision
         run: |
-          # Write credentials to temp file (JSON with special chars can't be passed via --update-env-vars)
-          echo '${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}' > /tmp/gcloud-creds.json
-
-          # Base64 encode to avoid shell escaping issues
-          ENCODED_CREDS=$(base64 -w 0 /tmp/gcloud-creds.json)
-
-          # Update service with encoded credentials
-          gcloud run services update ${{ env.SERVICE }} \
-            --region ${{ env.REGION }} \
-            --project ${{ env.PROJECT_ID }} \
-            --update-env-vars "GOOGLE_CLOUD_CREDENTIALS_BASE64=${ENCODED_CREDS}"
-
-          # Cleanup
-          rm -f /tmp/gcloud-creds.json
+          gcloud run services update-traffic ${{ env.SERVICE }} \
+            --to-revisions $NEW_REVISION=10 \
+            --region ${{ env.REGION }}
 
       - name: Get service URL
         run: |
           URL=$(gcloud run services describe ${{ env.SERVICE }} \
             --region ${{ env.REGION }} \
-            --format 'value(status.url)')
+            --format='value(status.url)')
           echo "SERVICE_URL=$URL" >> $GITHUB_ENV
-          echo "✅ Deployed to: $URL"
 
-      - name: Verify deployment health
+      # HEALTH CHECK + ROLLBACK
+      - name: Health check 200 OK (or rollback)
         run: |
-          echo "Testing health endpoint..."
-          MAX_RETRIES=5
-          RETRY_COUNT=0
-
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${{ env.SERVICE_URL }}/health" || echo "000")
-
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ Health check passed!"
-              exit 0
+          MAX=8
+          COUNT=0
+          OK=false
+          while [ $COUNT -lt $MAX ]; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVICE_URL/health")
+            if [ "$CODE" = "200" ]; then
+              echo "Health OK"
+              OK=true
+              break
             fi
-
-            echo "Attempt $((RETRY_COUNT + 1))/$MAX_RETRIES - Got HTTP $HTTP_CODE"
-            RETRY_COUNT=$((RETRY_COUNT + 1))
-            sleep 10
+            COUNT=$((COUNT+1))
+            sleep 8
           done
 
-          echo "❌ Health check failed after $MAX_RETRIES attempts"
-          exit 1
+          if [ "$OK" = false ]; then
+            echo "❌ Health failed — rolling back..."
 
-      - name: Post deployment summary
-        if: always()
+            gcloud run services update-traffic ${{ env.SERVICE }} \
+              --to-revisions $PREV_REVISION=100 \
+              --region ${{ env.REGION }}
+
+            echo "Rollback complete: $PREV_REVISION restored"
+            exit 1
+          fi
+
+      - name: Promote to 100% traffic
         run: |
-          echo "## 🚀 Backend Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Service | ${{ env.SERVICE }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Region | ${{ env.REGION }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| URL | ${{ env.SERVICE_URL }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          gcloud run services update-traffic ${{ env.SERVICE }} \
+            --to-revisions $NEW_REVISION=100 \
+            --region ${{ env.REGION }}
+
+      - name: Summary
+        run: |
+          echo "## Deploy Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Service: ${{ env.SERVICE }}" >> $GITHUB_STEP_SUMMARY
+          echo "- New Revision: $NEW_REVISION" >> $GITHUB_STEP_SUMMARY
+          echo "- Previous Revision: $PREV_REVISION" >> $GITHUB_STEP_SUMMARY
+          echo "- Region: ${{ env.REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Image: ${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- URL: ${{ env.SERVICE_URL }}" >> $GITHUB_STEP_SUMMARY
