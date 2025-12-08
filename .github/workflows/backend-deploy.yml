@@ -99,20 +99,22 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Authenticate Docker to Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
       - name: Build and push Docker image
         run: |
           cd backend
-          gcloud builds submit \
-            --tag ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}:${{ github.sha }} \
-            --project=${{ env.PROJECT_ID }} \
-            --timeout=20m
 
-          # Tag as latest
-          gcloud container images add-tag \
-            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}:${{ github.sha }} \
-            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}:latest \
-            --project=${{ env.PROJECT_ID }} \
-            --quiet
+          IMAGE_NAME="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}"
+
+          # Build the image
+          docker build -t "${IMAGE_NAME}:${{ github.sha }}" -t "${IMAGE_NAME}:latest" .
+
+          # Push both tags
+          docker push "${IMAGE_NAME}:${{ github.sha }}"
+          docker push "${IMAGE_NAME}:latest"
 
       # NEW: Capture current stable revision (before deploying)
       - name: Get previous stable revision
