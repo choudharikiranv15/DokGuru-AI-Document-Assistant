@@ -1,5 +1,5 @@
 # app_flask.py - Flask interface for RAG System with Voice Support
-# Version: 2.2.1 - Service Usage Permission Added
+# Version: 2.3.0 - All WIF Permissions Fixed
 from flask import Flask, render_template, request, jsonify, session, send_file, make_response, Response
 import re
 from flask_cors import CORS
