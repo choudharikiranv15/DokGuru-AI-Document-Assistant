@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@sentry/react": "^7.100.0",
+    "@supabase/supabase-js": "^2.86.2",
     "axios": "^1.6.0",
     "clsx": "^2.0.0",
     "date-fns": "^4.1.0",

@@ -240,6 +240,13 @@ export default function ChatInput({ setIsThinking }) {
                                 }])
                                 break
 
+                            case 'flashcards':
+                                updateMessage(messageId, {
+                                    flashcards: data.data,
+                                    streaming: true // Keep streaming until 'done'
+                                })
+                                break
+
                             case 'done':
                                 // Mark streaming as complete - audio will stop after last sentence
                                 setStreamingComplete(true)

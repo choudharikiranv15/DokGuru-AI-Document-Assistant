@@ -6,10 +6,13 @@ import MessageList from './MessageList'
 import ChatInput from './ChatInput'
 import DocumentUpload from '../documents/DocumentUpload'
 
+import useAuthStore from '../../stores/authStore'
+
 export default function ChatContainer() {
     const messages = useChatStore(state => state.messages)
     const documents = useDocumentStore(state => state.documents)
     const currentDocument = useDocumentStore(state => state.currentDocument)
+    const user = useAuthStore(state => state.user)
     const messagesEndRef = useRef(null)
     const [greeting, setGreeting] = useState('')
     const [userName, setUserName] = useState('')
@@ -23,20 +26,22 @@ export default function ChatContainer() {
         scrollToBottom()
     }, [messages, isThinking])
 
-    // Set greeting based on time of day
+    // Set greeting based on time of day and user profile
     useEffect(() => {
         const hour = new Date().getHours()
         if (hour < 12) setGreeting('Good Morning')
         else if (hour < 18) setGreeting('Good Afternoon')
         else setGreeting('Good Evening')
 
-        // Get user name from auth store if available
-        const email = localStorage.getItem('user_email')
-        if (email) {
-            const name = email.split('@')[0]
+        if (user) {
+            if (user.display_name) {
+                setUserName(user.display_name)
+            }
+        } else if (user.email) {
+            const name = user.email.split('@')[0]
             setUserName(name.charAt(0).toUpperCase() + name.slice(1))
         }
-    }, [])
+    }, [user])
 
     return (
         <div className="flex-1 flex flex-col w-full max-w-full overflow-hidden bg-[#0f172a]">

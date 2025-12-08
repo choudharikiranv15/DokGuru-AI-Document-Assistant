@@ -82,10 +82,26 @@ function MainApp() {
     useEffect(() => {
         if (!hasLoadedHistory) {
             const loadData = async () => {
-                // First fetch documents, then chat histories
+                // First fetch documents
                 await fetchDocuments()
-                // Don't auto-load last chat - let user start fresh or choose
-                await fetchChatHistories(false) // false = don't auto-load
+                
+                // Then fetch chat histories without auto-loading initially
+                await fetchChatHistories(false)
+                
+                // Check limits and decide whether to load last chat
+                const state = useChatHistoryStore.getState()
+                const { chatHistories, canCreateNewChat, loadChatHistory } = state
+                
+                // If limit reached, force load the last session
+                if (!canCreateNewChat() && chatHistories.length > 0) {
+                    const lastChat = chatHistories[0] // Assuming sorted by most recent
+                    await loadChatHistory(lastChat.id, true) // true = silent load
+                    toast.error('Chat limit reached. Loaded previous session. Upgrade to create new chats.', {
+                        icon: '🔒',
+                        duration: 5000
+                    })
+                }
+                
                 setHasLoadedHistory(true)
             }
             loadData()

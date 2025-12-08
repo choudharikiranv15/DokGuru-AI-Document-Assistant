@@ -81,7 +81,7 @@ class Database:
     def __init__(self):
         self.client = get_supabase_client()
 
-    def create_user(self, email: str, password_hash: str, role: str = None, institution: str = None, occupation: str = None) -> Dict[str, Any]:
+    def create_user(self, email: str, password_hash: str, role: str = None, institution: str = None, occupation: str = None, display_name: str = None) -> Dict[str, Any]:
         """Create a new user"""
         try:
             user_data = {
@@ -95,6 +95,8 @@ class Database:
                 user_data['institution'] = institution
             if occupation:
                 user_data['occupation'] = occupation
+            if display_name:
+                user_data['display_name'] = display_name
 
             response = self.client.table('users').insert(user_data).execute()
 

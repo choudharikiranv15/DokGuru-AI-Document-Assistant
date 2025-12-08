@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { supabase } from './supabaseClient'
 
 // Use environment variable for API URL, fallback to localhost for development
 // Production URL hardcoded for Vercel deployment (Vercel env var bug workaround)
@@ -13,21 +14,24 @@ const api = axios.create({
     withCredentials: false, // Set to true if using cookies for auth
 })
 
-// Request interceptor to add auth token from localStorage
+// Request interceptor to add auth token from Supabase
 api.interceptors.request.use(
-    (config) => {
-        // Get token from localStorage
-        const authStorage = localStorage.getItem('auth-storage')
-        if (authStorage) {
-            try {
-                const authData = JSON.parse(authStorage)
-                if (authData.state && authData.state.token) {
-                    config.headers.Authorization = `Bearer ${authData.state.token}`
-                }
-            } catch (error) {
-                // Error logged server-side only
-            }
+    async (config) => {
+        // If token is already set (e.g. by authStore), use it
+        if (config.headers.Authorization) {
+            return config
         }
+
+        // Otherwise, try to get fresh token from Supabase session
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            if (session?.access_token) {
+                config.headers.Authorization = `Bearer ${session.access_token}`
+            }
+        } catch (error) {
+            // console.warn('Failed to get Supabase session for request')
+        }
+        
         return config
     },
     (error) => {

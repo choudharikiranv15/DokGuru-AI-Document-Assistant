@@ -3,10 +3,12 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import useAuthStore from '../stores/authStore';
 import toast from 'react-hot-toast';
+import GoogleButton from '../components/auth/GoogleButton';
 
 export default function Signup() {
   const navigate = useNavigate();
   const signup = useAuthStore(state => state.signup);
+  const loginWithGoogle = useAuthStore(state => state.loginWithGoogle);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -28,6 +30,18 @@ export default function Signup() {
     else if (hour < 18) setGreeting('Good Afternoon');
     else setGreeting('Good Evening');
   }, []);
+
+  const handleGoogleLogin = async () => {
+    try {
+      const result = await loginWithGoogle();
+      if (!result.success) {
+        toast.error(result.message || 'Google login failed');
+      }
+      // Success is handled by redirect
+    } catch (error) {
+      toast.error('An error occurred with Google login.');
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -176,6 +190,20 @@ export default function Signup() {
           transition={{ delay: 0.4, duration: 0.6 }}
           className="bg-white/5 backdrop-blur-xl rounded-3xl p-8 border border-white/10 shadow-2xl"
         >
+          {/* Google Login */}
+          <div className="mb-6">
+            <GoogleButton onClick={handleGoogleLogin} text="Sign up with Google" />
+            
+            <div className="relative mt-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/10"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-[#0f1623] text-gray-400 rounded">Or continue with email</span>
+              </div>
+            </div>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email Input */}
             <motion.div

@@ -451,6 +451,13 @@ class RAGSystem:
                 conversation_history
             )
 
+            # Check if LLM used general knowledge (indicated by warning marker)
+            # If so, remove sources to avoid confusion
+            if response.get('answer', '').startswith('⚠️'):
+                self.logger.info("LLM used general knowledge - clearing sources from response")
+                response['sources'] = []
+                response['sources_used'] = 0
+
             # Add retrieval info
             response['query_type'] = retrieval_results['query_type']
             response['retrieval_stats'] = {
@@ -501,6 +508,69 @@ class RAGSystem:
             self.logger.info(f"Streaming query: {question} (user: {user_id})")
             if document_names:
                 self.logger.info(f"Filtering to documents: {', '.join(document_names)}")
+
+            # Intent Detection: Check for specific commands
+            question_lower = question.lower().strip()
+            target_doc = document_names[0] if document_names and len(document_names) > 0 else None
+            
+            if target_doc:
+                # Construct source info for the single target document
+                # This ensures the frontend knows which document was used
+                single_source = [{
+                    'page': 'All',
+                    'document': target_doc,
+                    'text': f"Full document: {target_doc}"
+                }]
+
+                # 1. Summary
+                if 'summary' in question_lower or 'summarize' in question_lower:
+                    self.logger.info(f"Intent detected: Summary for {target_doc}")
+                    yield {'type': 'sources', 'sources': single_source}
+                    yield {'type': 'chunk', 'content': f"Generating summary for **{target_doc}**...\n\n"}
+                    
+                    summary_result = self.summarize_document(target_doc, user_id)
+                    if summary_result.get('success'):
+                        yield {'type': 'chunk', 'content': summary_result['summary']}
+                        yield {'type': 'done', 'full_response': summary_result['summary'], 'sources_used': 1, 'sources': single_source}
+                        return
+                    else:
+                         yield {'type': 'error', 'content': f"Failed to generate summary: {summary_result.get('error', 'Unknown error')}"}
+                         return
+                
+                # 2. Flashcards
+                elif 'flashcard' in question_lower:
+                    self.logger.info(f"Intent detected: Flashcards for {target_doc}")
+                    yield {'type': 'sources', 'sources': single_source}
+                    yield {'type': 'chunk', 'content': f"Creating flashcards for **{target_doc}**...\n\n"}
+                    
+                    fc_result = self.generate_flashcards(target_doc, user_id)
+                    if fc_result.get('success'):
+                        yield {'type': 'flashcards', 'data': fc_result['flashcards']}
+                        yield {'type': 'done', 'full_response': "Generated flashcards.", 'sources_used': 1, 'sources': single_source}
+                        return
+                    else:
+                        yield {'type': 'error', 'content': f"Failed to generate flashcards: {fc_result.get('error', 'Unknown error')}"}
+                        return
+
+                # 3. Roadmap
+                elif 'roadmap' in question_lower or 'mindmap' in question_lower or 'mind map' in question_lower:
+                    self.logger.info(f"Intent detected: Roadmap for {target_doc}")
+                    yield {'type': 'sources', 'sources': single_source}
+                    yield {'type': 'chunk', 'content': f"Drawing roadmap for **{target_doc}**...\n\n"}
+                    
+                    rm_result = self.generate_roadmap(target_doc, user_id)
+                    if rm_result.get('success'):
+                        mermaid_code = rm_result['roadmap']
+                        # Clean up markdown code blocks if present
+                        mermaid_code = mermaid_code.replace('```mermaid', '').replace('```', '').strip()
+                        
+                        content = f"### Roadmap: {target_doc}\n\n```mermaid\n{mermaid_code}\n```"
+                        yield {'type': 'chunk', 'content': content}
+                        yield {'type': 'done', 'full_response': content, 'sources_used': 1, 'sources': single_source}
+                        return
+                    else:
+                        yield {'type': 'error', 'content': f"Failed to generate roadmap: {rm_result.get('error', 'Unknown error')}"}
+                        return
 
             # Step 1: Retrieve relevant documents (non-streaming)
             retrieval_results = self.retriever.retrieve(

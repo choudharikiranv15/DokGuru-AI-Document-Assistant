@@ -7,6 +7,7 @@ import { textToSpeech } from '../../services/api'
 import { toast } from 'react-hot-toast'
 import api from '../../services/api'
 import MermaidRenderer from '../documents/MermaidRenderer'
+import FlashcardDeck from './FlashcardDeck'
 
 function Message({ message }) {
     const isUser = message.role === 'user'
@@ -302,6 +303,11 @@ function Message({ message }) {
                                     transition={{ duration: 0.8, repeat: Infinity }}
                                 />
                             )}
+                            
+                            {/* Flashcards Deck */}
+                            {message.flashcards && message.flashcards.length > 0 && (
+                                <FlashcardDeck cards={message.flashcards} />
+                            )}
                         </div>
                     )}
 
@@ -552,5 +558,6 @@ export default memo(Message, (prevProps, nextProps) => {
            prevProps.message.audioReady === nextProps.message.audioReady &&
            prevProps.message.streaming === nextProps.message.streaming &&
            prevProps.message.streamingGenerated === nextProps.message.streamingGenerated &&
-           JSON.stringify(prevProps.message.metadata) === JSON.stringify(nextProps.message.metadata)
+           JSON.stringify(prevProps.message.metadata) === JSON.stringify(nextProps.message.metadata) &&
+           JSON.stringify(prevProps.message.flashcards) === JSON.stringify(nextProps.message.flashcards)
 })
