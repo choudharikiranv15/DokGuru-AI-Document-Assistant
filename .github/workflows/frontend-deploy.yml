@@ -15,6 +15,7 @@ env:
   NODE_VERSION: '20'
   VITE_API_BASE_URL: https://dokguru-backend-project-ef045ea2-1f6e-46ec-9d7.asia-south2.run.app/
 
+
 jobs:
   # ==================== TEST & BUILD JOB ====================
   test-and-build:
