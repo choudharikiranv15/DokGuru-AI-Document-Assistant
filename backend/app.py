@@ -2888,23 +2888,39 @@ def admin_get_user_details(user_id):
             logger.warning(f"Failed to get query count: {e}")
             query_count = 0
         
-        # Format last login - return full timestamp in IST (Bangalore timezone)
-        last_login = user.get('last_login')
-        if last_login:
-            try:
-                from datetime import datetime, timedelta
-                if isinstance(last_login, str):
-                    last_login_dt = datetime.fromisoformat(last_login.replace('Z', '+00:00'))
-                else:
-                    last_login_dt = last_login
-                
-                # Convert to IST (UTC+5:30)
-                ist_offset = timedelta(hours=5, minutes=30)
-                last_login_ist = last_login_dt + ist_offset
-                last_active = last_login_ist.strftime('%b %d, %Y at %I:%M %p IST')
-            except:
-                last_active = 'Recently'
-        else:
+        # Get last active time from most recent chat activity
+        last_active = 'Never'
+        try:
+            from datetime import datetime, timedelta
+            # Get the most recent chat activity (updated_at from chat_histories)
+            last_activity_response = db.client.table('chat_histories').select('updated_at').eq('user_id', user_id).order('updated_at', desc=True).limit(1).execute()
+
+            if last_activity_response.data and len(last_activity_response.data) > 0:
+                last_activity_time = last_activity_response.data[0]['updated_at']
+                if last_activity_time:
+                    if isinstance(last_activity_time, str):
+                        last_activity_dt = datetime.fromisoformat(last_activity_time.replace('Z', '+00:00'))
+                    else:
+                        last_activity_dt = last_activity_time
+
+                    # Convert to IST (UTC+5:30)
+                    ist_offset = timedelta(hours=5, minutes=30)
+                    last_activity_ist = last_activity_dt + ist_offset
+                    last_active = last_activity_ist.strftime('%b %d, %Y at %I:%M %p IST')
+            else:
+                # Fallback to last_login if no chat history
+                last_login = user.get('last_login')
+                if last_login:
+                    if isinstance(last_login, str):
+                        last_login_dt = datetime.fromisoformat(last_login.replace('Z', '+00:00'))
+                    else:
+                        last_login_dt = last_login
+
+                    ist_offset = timedelta(hours=5, minutes=30)
+                    last_login_ist = last_login_dt + ist_offset
+                    last_active = last_login_ist.strftime('%b %d, %Y at %I:%M %p IST')
+        except Exception as e:
+            logger.warning(f"Failed to get last active time: {e}")
             last_active = 'Never'
         
         # Get user stats
@@ -2915,14 +2931,29 @@ def admin_get_user_details(user_id):
             'last_active': last_active
         }
 
-        # Get recent queries from chat_histories
+        # Get last 5 chat sessions (recent activity)
         recent_queries = []
         try:
-            queries_response = db.client.table('chat_histories').select('query, created_at').eq('user_id', user_id).order('created_at', desc=True).limit(5).execute()
-            if queries_response.data:
-                recent_queries = queries_response.data
+            # Fetch last 5 chat sessions with their details
+            sessions_response = db.client.table('chat_histories').select('id, document_name, first_message, messages, message_count, created_at, updated_at').eq('user_id', user_id).order('updated_at', desc=True).limit(5).execute()
+
+            if sessions_response.data:
+                for session in sessions_response.data:
+                    # Extract the first user query from the session
+                    query_text = session.get('first_message', 'No query')
+
+                    # Use updated_at to show when this session was last active
+                    session_time = session.get('updated_at', session.get('created_at'))
+
+                    recent_queries.append({
+                        'id': session.get('id'),
+                        'query': query_text,
+                        'document_name': session.get('document_name', 'Unknown Document'),
+                        'message_count': session.get('message_count', 0),
+                        'created_at': session_time
+                    })
         except Exception as e:
-            logger.warning(f"Failed to get recent queries: {e}")
+            logger.warning(f"Failed to get recent sessions: {e}")
 
         return jsonify({
             'success': True,
@@ -3099,6 +3130,294 @@ def admin_setup():
         })
     except Exception as e:
         logger.error(f"Admin setup error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/admin/users/<user_id>', methods=['DELETE', 'OPTIONS'])
+@require_admin
+def admin_delete_user(user_id):
+    """Delete a user (admin only)"""
+    try:
+        # Prevent self-deletion
+        if request.user_id == user_id:
+            return jsonify({'success': False, 'message': 'Cannot delete your own account'}), 400
+
+        # Check if user exists
+        user_result = db.client.table('users').select('*').eq('id', user_id).execute()
+        if not user_result.data:
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+
+        user = user_result.data[0]
+
+        # Prevent deleting other admins
+        if user.get('is_admin'):
+            return jsonify({'success': False, 'message': 'Cannot delete admin users'}), 403
+
+        # Delete user (CASCADE will delete associated documents, etc.)
+        db.client.table('users').delete().eq('id', user_id).execute()
+
+        logger.info(f"Admin {request.user_email} deleted user {user.get('email')} (ID: {user_id})")
+
+        return jsonify({
+            'success': True,
+            'message': f'User {user.get("email")} deleted successfully'
+        })
+    except Exception as e:
+        logger.error(f"Admin delete user error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/admin/users/<user_id>/ban', methods=['POST', 'OPTIONS'])
+@require_admin
+def admin_ban_user(user_id):
+    """Ban/suspend a user (admin only)"""
+    try:
+        data = request.get_json()
+        reason = data.get('reason', 'No reason provided')
+
+        # Prevent self-ban
+        if request.user_id == user_id:
+            return jsonify({'success': False, 'message': 'Cannot ban your own account'}), 400
+
+        # Check if user exists
+        user_result = db.client.table('users').select('*').eq('id', user_id).execute()
+        if not user_result.data:
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+
+        user = user_result.data[0]
+
+        # Prevent banning other admins
+        if user.get('is_admin'):
+            return jsonify({'success': False, 'message': 'Cannot ban admin users'}), 403
+
+        # Ban user
+        db.client.table('users').update({
+            'is_active': False,
+            'banned_at': 'now()',
+            'banned_by': request.user_id,
+            'ban_reason': reason
+        }).eq('id', user_id).execute()
+
+        logger.info(f"Admin {request.user_email} banned user {user.get('email')} (ID: {user_id}). Reason: {reason}")
+
+        return jsonify({
+            'success': True,
+            'message': f'User {user.get("email")} has been banned'
+        })
+    except Exception as e:
+        logger.error(f"Admin ban user error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/admin/users/<user_id>/unban', methods=['POST', 'OPTIONS'])
+@require_admin
+def admin_unban_user(user_id):
+    """Unban/activate a user (admin only)"""
+    try:
+        # Check if user exists
+        user_result = db.client.table('users').select('*').eq('id', user_id).execute()
+        if not user_result.data:
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+
+        user = user_result.data[0]
+
+        # Unban user
+        db.client.table('users').update({
+            'is_active': True,
+            'banned_at': None,
+            'banned_by': None,
+            'ban_reason': None
+        }).eq('id', user_id).execute()
+
+        logger.info(f"Admin {request.user_email} unbanned user {user.get('email')} (ID: {user_id})")
+
+        return jsonify({
+            'success': True,
+            'message': f'User {user.get("email")} has been unbanned'
+        })
+    except Exception as e:
+        logger.error(f"Admin unban user error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/admin/users/<user_id>', methods=['PATCH', 'OPTIONS'])
+@require_admin
+def admin_update_user(user_id):
+    """Update user details (admin only)"""
+    try:
+        data = request.get_json()
+
+        # Check if user exists
+        user_result = db.client.table('users').select('*').eq('id', user_id).execute()
+        if not user_result.data:
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+
+        # Allowed fields to update
+        allowed_fields = ['role', 'institution', 'occupation', 'admin_notes']
+        update_data = {k: v for k, v in data.items() if k in allowed_fields}
+
+        if not update_data:
+            return jsonify({'success': False, 'message': 'No valid fields to update'}), 400
+
+        # Update user
+        db.client.table('users').update(update_data).eq('id', user_id).execute()
+
+        logger.info(f"Admin {request.user_email} updated user {user_id}: {update_data}")
+
+        return jsonify({
+            'success': True,
+            'message': 'User updated successfully',
+            'updated_fields': list(update_data.keys())
+        })
+    except Exception as e:
+        logger.error(f"Admin update user error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/admin/system/health', methods=['GET', 'OPTIONS'])
+@require_admin
+def admin_system_health():
+    """Get system health metrics (admin only)"""
+    try:
+        from datetime import datetime, timedelta
+
+        # Server metrics (only available in local/VM deployments, not Cloud Run)
+        try:
+            import psutil
+            cpu_percent = psutil.cpu_percent(interval=0.5)
+            memory = psutil.virtual_memory()
+            disk = psutil.disk_usage('/')
+            server_metrics = {
+                'cpu_percent': round(cpu_percent, 2),
+                'memory': {
+                    'total': memory.total,
+                    'available': memory.available,
+                    'percent': memory.percent,
+                    'used': memory.used
+                },
+                'disk': {
+                    'total': disk.total,
+                    'used': disk.used,
+                    'free': disk.free,
+                    'percent': disk.percent
+                }
+            }
+        except Exception as e:
+            # psutil not available or Cloud Run environment
+            logger.warning(f"Server metrics unavailable: {e}")
+            server_metrics = None
+
+        # Database stats
+        db_stats = {
+            'total_users': db.client.table('users').select('id', count='exact').execute().count,
+            'active_users': db.client.table('users').select('id', count='exact').eq('is_active', True).execute().count,
+            'total_documents': db.client.table('documents').select('id', count='exact').execute().count,
+            'total_queries': db.client.table('chat_histories').select('id', count='exact').execute().count,
+        }
+
+        # Recent activity (last 24 hours)
+        yesterday = (datetime.now() - timedelta(days=1)).isoformat()
+        recent_activity = {
+            'new_users_24h': db.client.table('users').select('id', count='exact').gte('created_at', yesterday).execute().count,
+            'new_documents_24h': db.client.table('documents').select('id', count='exact').gte('uploaded_at', yesterday).execute().count,
+            'queries_24h': db.client.table('chat_histories').select('id', count='exact').gte('created_at', yesterday).execute().count,
+        }
+
+        # Error logs (last 100 errors from logs if available)
+        # This is a placeholder - you'd need to implement log storage
+        error_logs = []
+
+        # Storage usage (sum of all document file sizes)
+        storage_result = db.client.table('documents').select('file_size').execute()
+        total_storage = sum(doc.get('file_size', 0) for doc in storage_result.data if doc.get('file_size'))
+
+        response_data = {
+            'success': True,
+            'database': db_stats,
+            'recent_activity': recent_activity,
+            'storage': {
+                'total_bytes': total_storage,
+                'total_mb': round(total_storage / (1024 * 1024), 2),
+                'total_gb': round(total_storage / (1024 * 1024 * 1024), 2)
+            },
+            'error_logs': error_logs,
+            'timestamp': datetime.now().isoformat()
+        }
+
+        # Only include server metrics if available
+        if server_metrics:
+            response_data['server'] = server_metrics
+
+        return jsonify(response_data)
+    except Exception as e:
+        logger.error(f"Admin system health error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/admin/analytics/timeseries', methods=['GET', 'OPTIONS'])
+@require_admin
+def admin_analytics_timeseries():
+    """Get time-based analytics (admin only)"""
+    try:
+        from datetime import datetime, timedelta
+
+        # Get time range from query params (default: last 30 days)
+        days = int(request.args.get('days', 30))
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+
+        # User registrations over time
+        users_result = db.client.table('users').select('created_at').gte('created_at', start_date.isoformat()).execute()
+
+        # Document uploads over time
+        docs_result = db.client.table('documents').select('uploaded_at').gte('uploaded_at', start_date.isoformat()).execute()
+
+        # Queries over time
+        queries_result = db.client.table('chat_histories').select('created_at').gte('created_at', start_date.isoformat()).execute()
+
+        # Feedback over time
+        feedback_result = db.client.table('site_feedback').select('created_at').gte('created_at', start_date.isoformat()).execute()
+
+        # Group by date
+        def group_by_date(data, date_field):
+            from collections import defaultdict
+            grouped = defaultdict(int)
+            for item in data:
+                if item.get(date_field):
+                    date = item[date_field][:10]  # Extract YYYY-MM-DD
+                    grouped[date] += 1
+            return dict(grouped)
+
+        users_by_date = group_by_date(users_result.data, 'created_at')
+        docs_by_date = group_by_date(docs_result.data, 'uploaded_at')
+        queries_by_date = group_by_date(queries_result.data, 'created_at')
+        feedback_by_date = group_by_date(feedback_result.data, 'created_at')
+
+        # Fill in missing dates with 0
+        date_range = []
+        current = start_date
+        while current <= end_date:
+            date_str = current.strftime('%Y-%m-%d')
+            date_range.append({
+                'date': date_str,
+                'users': users_by_date.get(date_str, 0),
+                'documents': docs_by_date.get(date_str, 0),
+                'queries': queries_by_date.get(date_str, 0),
+                'feedback': feedback_by_date.get(date_str, 0)
+            })
+            current += timedelta(days=1)
+
+        return jsonify({
+            'success': True,
+            'data': date_range,
+            'period': {
+                'start': start_date.isoformat(),
+                'end': end_date.isoformat(),
+                'days': days
+            }
+        })
+    except Exception as e:
+        logger.error(f"Admin analytics timeseries error: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
 

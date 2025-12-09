@@ -17,6 +17,8 @@ export default function AdminDashboard() {
     const [feedback, setFeedback] = useState([])
     const [aiFeedback, setAiFeedback] = useState([])
     const [aiFeedbackAnalytics, setAiFeedbackAnalytics] = useState(null)
+    const [timeseriesData, setTimeseriesData] = useState(null)
+    const [timeRange, setTimeRange] = useState(30)
     const navigate = useNavigate()
     const user = useAuthStore(state => state.user)
     const token = useAuthStore(state => state.token)
@@ -33,9 +35,10 @@ export default function AdminDashboard() {
     useEffect(() => {
         fetchDashboardData()
         fetchAIFeedback() // Always fetch for overview charts
+        fetchTimeseriesData(timeRange) // Always fetch for overview charts
         if (activeTab === 'users') fetchUsers()
         if (activeTab === 'feedback') fetchFeedback()
-    }, [activeTab])
+    }, [activeTab, timeRange])
 
     const fetchDashboardData = async () => {
         try {
@@ -105,9 +108,26 @@ export default function AdminDashboard() {
         }
     }
 
+    const fetchTimeseriesData = async (days) => {
+        try {
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/admin/analytics/timeseries?days=${days}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            const data = await response.json()
+            if (data.success) {
+                setTimeseriesData(data.data)
+            }
+        } catch (error) {
+            // Error logged server-side only
+        }
+    }
+
     const tabs = [
         { id: 'overview', label: '📊 Overview', icon: '📊' },
         { id: 'users', label: '👥 Users', icon: '👥' },
+        { id: 'system-health', label: '🏥 System Health', icon: '🏥' },
         { id: 'ai-responses', label: '🤖 AI Responses', icon: '🤖' },
         { id: 'feedback', label: '💬 Site Feedback', icon: '💬' }
     ]
@@ -179,10 +199,19 @@ export default function AdminDashboard() {
             {/* Content */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
                 {activeTab === 'overview' && (
-                    <OverviewTab data={dashboardData} aiAnalytics={aiFeedbackAnalytics} />
+                    <OverviewTab
+                        data={dashboardData}
+                        aiAnalytics={aiFeedbackAnalytics}
+                        timeseriesData={timeseriesData}
+                        timeRange={timeRange}
+                        setTimeRange={setTimeRange}
+                    />
                 )}
                 {activeTab === 'users' && (
                     <UsersTab users={users} />
+                )}
+                {activeTab === 'system-health' && (
+                    <SystemHealthTab token={token} />
                 )}
                 {activeTab === 'ai-responses' && (
                     <AIResponsesTab feedback={aiFeedback} analytics={aiFeedbackAnalytics} />
@@ -196,9 +225,15 @@ export default function AdminDashboard() {
 }
 
 // Overview Tab Component with 3D Charts
-function OverviewTab({ data, aiAnalytics }) {
+function OverviewTab({ data, aiAnalytics, timeseriesData, timeRange, setTimeRange }) {
     const system = data?.system || {}
     const feedback = data?.feedback || {}
+
+    const timeRangeOptions = [
+        { label: '7 Days', value: 7 },
+        { label: '30 Days', value: 30 },
+        { label: '90 Days', value: 90 }
+    ]
 
     const stats = [
         { label: 'Total Users', value: system.total_users || 0, icon: '👥', color: 'from-blue-500 to-cyan-500' },
@@ -245,6 +280,29 @@ function OverviewTab({ data, aiAnalytics }) {
 
     return (
         <div className="space-y-6 md:space-y-8">
+            {/* Time Range Selector */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-xl font-bold text-white">Analytics Overview</h2>
+                    <p className="text-sm text-gray-400">System performance and trends</p>
+                </div>
+                <div className="flex gap-2">
+                    {timeRangeOptions.map(option => (
+                        <button
+                            key={option.value}
+                            onClick={() => setTimeRange(option.value)}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                timeRange === option.value
+                                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                            }`}
+                        >
+                            {option.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
             {/* Stats Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                 {stats.map((stat, i) => (
@@ -267,6 +325,161 @@ function OverviewTab({ data, aiAnalytics }) {
                     </motion.div>
                 ))}
             </div>
+
+            {/* Time-Based Analytics Charts */}
+            {timeseriesData && timeseriesData.length > 0 && (
+                <div className="space-y-6">
+                    <h3 className="text-lg font-bold text-white">Trends Over Time</h3>
+
+                    {/* User Growth Chart */}
+                    <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl md:rounded-2xl p-4 md:p-6">
+                        <h4 className="text-base md:text-lg font-bold mb-4 text-white">User Registrations</h4>
+                        <ResponsiveContainer width="100%" height={250}>
+                            <LineChart data={timeseriesData}>
+                                <defs>
+                                    <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                                <XAxis
+                                    dataKey="date"
+                                    stroke="#9ca3af"
+                                    tick={{ fill: '#9ca3af', fontSize: 12 }}
+                                    tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                />
+                                <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af' }} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Line
+                                    type="monotone"
+                                    dataKey="users"
+                                    stroke="#3b82f6"
+                                    strokeWidth={2}
+                                    fill="url(#colorUsers)"
+                                    dot={{ fill: '#3b82f6', r: 4 }}
+                                />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+
+                    {/* Documents & Queries Chart */}
+                    <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl md:rounded-2xl p-4 md:p-6">
+                        <h4 className="text-base md:text-lg font-bold mb-4 text-white">Documents & Queries Activity</h4>
+                        <ResponsiveContainer width="100%" height={250}>
+                            <LineChart data={timeseriesData}>
+                                <defs>
+                                    <linearGradient id="colorDocs" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
+                                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                                    </linearGradient>
+                                    <linearGradient id="colorQueries" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                                <XAxis
+                                    dataKey="date"
+                                    stroke="#9ca3af"
+                                    tick={{ fill: '#9ca3af', fontSize: 12 }}
+                                    tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                />
+                                <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af' }} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Legend />
+                                <Line
+                                    type="monotone"
+                                    dataKey="documents"
+                                    stroke="#8b5cf6"
+                                    strokeWidth={2}
+                                    fill="url(#colorDocs)"
+                                    dot={{ fill: '#8b5cf6', r: 3 }}
+                                    name="Documents"
+                                />
+                                <Line
+                                    type="monotone"
+                                    dataKey="queries"
+                                    stroke="#10b981"
+                                    strokeWidth={2}
+                                    fill="url(#colorQueries)"
+                                    dot={{ fill: '#10b981', r: 3 }}
+                                    name="Queries"
+                                />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+
+                    {/* Overall Activity Chart */}
+                    <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl md:rounded-2xl p-4 md:p-6">
+                        <h4 className="text-base md:text-lg font-bold mb-4 text-white">Overall Platform Activity</h4>
+                        <ResponsiveContainer width="100%" height={300}>
+                            <AreaChart data={timeseriesData}>
+                                <defs>
+                                    <linearGradient id="colorUsersArea" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                                    </linearGradient>
+                                    <linearGradient id="colorDocsArea" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
+                                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.1}/>
+                                    </linearGradient>
+                                    <linearGradient id="colorQueriesArea" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.1}/>
+                                    </linearGradient>
+                                    <linearGradient id="colorFeedbackArea" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/>
+                                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.1}/>
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                                <XAxis
+                                    dataKey="date"
+                                    stroke="#9ca3af"
+                                    tick={{ fill: '#9ca3af', fontSize: 12 }}
+                                    tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                />
+                                <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af' }} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Legend />
+                                <Area
+                                    type="monotone"
+                                    dataKey="users"
+                                    stroke="#3b82f6"
+                                    fillOpacity={1}
+                                    fill="url(#colorUsersArea)"
+                                    name="Users"
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="documents"
+                                    stroke="#8b5cf6"
+                                    fillOpacity={1}
+                                    fill="url(#colorDocsArea)"
+                                    name="Documents"
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="queries"
+                                    stroke="#10b981"
+                                    fillOpacity={1}
+                                    fill="url(#colorQueriesArea)"
+                                    name="Queries"
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="feedback"
+                                    stroke="#f59e0b"
+                                    fillOpacity={1}
+                                    fill="url(#colorFeedbackArea)"
+                                    name="Feedback"
+                                />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            )}
 
             {/* 3D Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
@@ -388,6 +601,12 @@ function UsersTab({ users }) {
     const [selectedUser, setSelectedUser] = useState(null)
     const [userDetails, setUserDetails] = useState(null)
     const [loadingDetails, setLoadingDetails] = useState(false)
+    const [showEditModal, setShowEditModal] = useState(false)
+    const [showDeleteModal, setShowDeleteModal] = useState(false)
+    const [showBanModal, setShowBanModal] = useState(false)
+    const [showPromoteModal, setShowPromoteModal] = useState(false)
+    const [actionUser, setActionUser] = useState(null)
+    const [refreshTrigger, setRefreshTrigger] = useState(0)
     const token = useAuthStore(state => state.token)
 
     const filteredUsers = users.filter(user =>
@@ -488,12 +707,59 @@ function UsersTab({ users }) {
                                         )}
                                     </td>
                                     <td className="px-6 py-4">
-                                        <button
-                                            onClick={() => handleViewDetails(user)}
-                                            className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white rounded-lg text-sm font-medium transition-all"
-                                        >
-                                            View Details
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => handleViewDetails(user)}
+                                                className="px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white rounded-lg text-xs font-medium transition-all"
+                                                title="View Details"
+                                            >
+                                                View
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setActionUser(user)
+                                                    setShowEditModal(true)
+                                                }}
+                                                className="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/50 rounded-lg text-xs font-medium transition-all"
+                                                title="Edit User"
+                                            >
+                                                Edit
+                                            </button>
+                                            {!user.is_admin && (
+                                                <>
+                                                    <button
+                                                        onClick={() => {
+                                                            setActionUser(user)
+                                                            setShowPromoteModal(true)
+                                                        }}
+                                                        className="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 border border-purple-500/50 rounded-lg text-xs font-medium transition-all"
+                                                        title="Promote to Admin"
+                                                    >
+                                                        Promote
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setActionUser(user)
+                                                            setShowBanModal(true)
+                                                        }}
+                                                        className="px-3 py-1.5 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border border-orange-500/50 rounded-lg text-xs font-medium transition-all"
+                                                        title="Ban User"
+                                                    >
+                                                        {user.is_active === false ? 'Unban' : 'Ban'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setActionUser(user)
+                                                            setShowDeleteModal(true)
+                                                        }}
+                                                        className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/50 rounded-lg text-xs font-medium transition-all"
+                                                        title="Delete User"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -511,6 +777,113 @@ function UsersTab({ users }) {
                     onClose={() => {
                         setSelectedUser(null)
                         setUserDetails(null)
+                    }}
+                />
+            )}
+
+            {/* Edit User Modal */}
+            {showEditModal && actionUser && (
+                <EditUserModal
+                    user={actionUser}
+                    token={token}
+                    onClose={() => {
+                        setShowEditModal(false)
+                        setActionUser(null)
+                    }}
+                    onSuccess={() => {
+                        setShowEditModal(false)
+                        setActionUser(null)
+                        setRefreshTrigger(prev => prev + 1)
+                        window.location.reload()
+                    }}
+                />
+            )}
+
+            {/* Delete User Modal */}
+            {showDeleteModal && actionUser && (
+                <ConfirmActionModal
+                    title="Delete User"
+                    message={`Are you sure you want to delete ${actionUser.email}? This action cannot be undone.`}
+                    confirmText="Delete"
+                    confirmClass="bg-red-500 hover:bg-red-600"
+                    onConfirm={async () => {
+                        try {
+                            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/admin/users/${actionUser.id}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'Authorization': `Bearer ${token}`
+                                }
+                            })
+                            const data = await response.json()
+                            if (data.success) {
+                                toast.success(data.message)
+                                setShowDeleteModal(false)
+                                setActionUser(null)
+                                window.location.reload()
+                            } else {
+                                toast.error(data.message)
+                            }
+                        } catch (error) {
+                            toast.error('Failed to delete user')
+                        }
+                    }}
+                    onClose={() => {
+                        setShowDeleteModal(false)
+                        setActionUser(null)
+                    }}
+                />
+            )}
+
+            {/* Ban/Unban User Modal */}
+            {showBanModal && actionUser && (
+                <BanUserModal
+                    user={actionUser}
+                    token={token}
+                    onClose={() => {
+                        setShowBanModal(false)
+                        setActionUser(null)
+                    }}
+                    onSuccess={() => {
+                        setShowBanModal(false)
+                        setActionUser(null)
+                        window.location.reload()
+                    }}
+                />
+            )}
+
+            {/* Promote User Modal */}
+            {showPromoteModal && actionUser && (
+                <ConfirmActionModal
+                    title="Promote to Admin"
+                    message={`Are you sure you want to promote ${actionUser.email} to admin? They will have full access to the admin dashboard.`}
+                    confirmText="Promote"
+                    confirmClass="bg-purple-500 hover:bg-purple-600"
+                    onConfirm={async () => {
+                        try {
+                            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/admin/promote`, {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': `Bearer ${token}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ email: actionUser.email })
+                            })
+                            const data = await response.json()
+                            if (data.success) {
+                                toast.success(data.message)
+                                setShowPromoteModal(false)
+                                setActionUser(null)
+                                window.location.reload()
+                            } else {
+                                toast.error(data.message)
+                            }
+                        } catch (error) {
+                            toast.error('Failed to promote user')
+                        }
+                    }}
+                    onClose={() => {
+                        setShowPromoteModal(false)
+                        setActionUser(null)
                     }}
                 />
             )}
@@ -659,18 +1032,35 @@ function UserDetailsModal({ user, details, loading, onClose }) {
                                     )}
                                 </div>
 
-                                {/* Recent Activity */}
+                                {/* Recent Activity - Last 5 Sessions */}
                                 <div>
                                     <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                                        <span>🕐</span> Recent Activity
+                                        <span>🕐</span> Recent Activity (Last 5 Sessions)
                                     </h3>
                                     {details.recent_queries && details.recent_queries.length > 0 ? (
-                                        <div className="space-y-2">
-                                            {details.recent_queries.slice(0, 5).map((query, idx) => (
-                                                <div key={idx} className="bg-white/5 border border-white/10 rounded-lg p-3">
-                                                    <div className="text-white text-sm mb-1">{query.query || 'Query'}</div>
-                                                    <div className="text-xs text-gray-400">
-                                                        {new Date(query.created_at).toLocaleString()}
+                                        <div className="space-y-3">
+                                            {details.recent_queries.map((session, idx) => (
+                                                <div key={session.id || idx} className="bg-white/5 border border-white/10 rounded-lg p-4 hover:border-white/20 transition-all">
+                                                    <div className="flex items-start justify-between mb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-8 h-8 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                                                                <span className="text-lg">💬</span>
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-white font-medium text-sm">
+                                                                    {session.document_name || 'Unknown Document'}
+                                                                </div>
+                                                                <div className="text-xs text-gray-500">
+                                                                    {session.message_count || 0} messages
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-xs text-gray-400">
+                                                            {new Date(session.created_at).toLocaleDateString()} {new Date(session.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-gray-300 text-sm pl-10 line-clamp-2">
+                                                        {session.query || 'No query'}
                                                     </div>
                                                 </div>
                                             ))}
@@ -1085,5 +1475,555 @@ function FeedbackTab({ feedback }) {
                 )}
             </div>
         </div>
+    )
+}
+
+// System Health Tab Component
+function SystemHealthTab({ token }) {
+    const [healthData, setHealthData] = useState(null)
+    const [loading, setLoading] = useState(true)
+    const [autoRefresh, setAutoRefresh] = useState(true)
+
+    const fetchHealthData = async () => {
+        try {
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/admin/system/health`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            const data = await response.json()
+            if (data.success) {
+                setHealthData(data)
+            }
+            setLoading(false)
+        } catch (error) {
+            toast.error('Failed to load system health')
+            setLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        fetchHealthData()
+
+        // Auto-refresh every 30 seconds if enabled
+        if (autoRefresh) {
+            const interval = setInterval(fetchHealthData, 30000)
+            return () => clearInterval(interval)
+        }
+    }, [autoRefresh])
+
+    const formatBytes = (bytes) => {
+        if (bytes === 0) return '0 Bytes'
+        const k = 1024
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
+        const i = Math.floor(Math.log(bytes) / Math.log(k))
+        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+    }
+
+    const getStatusColor = (percent) => {
+        if (percent < 50) return 'from-green-500 to-emerald-500'
+        if (percent < 75) return 'from-yellow-500 to-orange-500'
+        return 'from-red-500 to-rose-500'
+    }
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center py-12">
+                <div className="animate-spin w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full"></div>
+            </div>
+        )
+    }
+
+    if (!healthData) {
+        return (
+            <div className="text-center py-12 text-gray-400">
+                <p>Failed to load system health data</p>
+            </div>
+        )
+    }
+
+    const { server, database, recent_activity, storage } = healthData
+
+    return (
+        <div className="space-y-6">
+            {/* Header with Auto-Refresh Toggle */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-2xl font-bold text-white">System Health Monitor</h2>
+                    <p className="text-sm text-gray-400">Production database metrics and performance</p>
+                </div>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={fetchHealthData}
+                        className="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/50 rounded-lg text-sm font-medium transition-all"
+                    >
+                        Refresh Now
+                    </button>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={autoRefresh}
+                            onChange={(e) => setAutoRefresh(e.target.checked)}
+                            className="w-4 h-4 text-purple-500 bg-white/5 border-white/10 rounded focus:ring-purple-500"
+                        />
+                        <span className="text-sm text-gray-300">Auto-refresh (30s)</span>
+                    </label>
+                </div>
+            </div>
+
+            {/* Server Metrics (only show if available - local dev only) */}
+            {server && (
+                <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-bold text-white">Server Metrics</h3>
+                        <span className="text-xs text-yellow-400 bg-yellow-500/10 px-2 py-1 rounded">Local Dev Only</span>
+                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* CPU Usage */}
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <span className="text-gray-300 font-medium">CPU Usage</span>
+                            <span className="text-white font-bold">{server.cpu_percent}%</span>
+                        </div>
+                        <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
+                            <div
+                                className={`h-full bg-gradient-to-r ${getStatusColor(server.cpu_percent)} transition-all duration-500`}
+                                style={{ width: `${server.cpu_percent}%` }}
+                            ></div>
+                        </div>
+                    </div>
+
+                    {/* Memory Usage */}
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <span className="text-gray-300 font-medium">Memory Usage</span>
+                            <span className="text-white font-bold">{server.memory.percent}%</span>
+                        </div>
+                        <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
+                            <div
+                                className={`h-full bg-gradient-to-r ${getStatusColor(server.memory.percent)} transition-all duration-500`}
+                                style={{ width: `${server.memory.percent}%` }}
+                            ></div>
+                        </div>
+                        <div className="text-xs text-gray-400">
+                            {formatBytes(server.memory.used)} / {formatBytes(server.memory.total)}
+                        </div>
+                    </div>
+
+                    {/* Disk Usage */}
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <span className="text-gray-300 font-medium">Disk Usage</span>
+                            <span className="text-white font-bold">{server.disk.percent}%</span>
+                        </div>
+                        <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
+                            <div
+                                className={`h-full bg-gradient-to-r ${getStatusColor(server.disk.percent)} transition-all duration-500`}
+                                style={{ width: `${server.disk.percent}%` }}
+                            ></div>
+                        </div>
+                        <div className="text-xs text-gray-400">
+                            {formatBytes(server.disk.used)} / {formatBytes(server.disk.total)}
+                        </div>
+                    </div>
+                </div>
+                </div>
+            )}
+
+            {/* Database Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
+                    <h3 className="text-lg font-bold text-white mb-4">Database Statistics</h3>
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                            <span className="text-gray-300">Total Users</span>
+                            <span className="text-white font-bold">{database.total_users}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                            <span className="text-gray-300">Active Users</span>
+                            <span className="text-green-400 font-bold">{database.active_users}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                            <span className="text-gray-300">Total Documents</span>
+                            <span className="text-white font-bold">{database.total_documents}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                            <span className="text-gray-300">Total Queries</span>
+                            <span className="text-white font-bold">{database.total_queries}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
+                    <h3 className="text-lg font-bold text-white mb-4">Recent Activity (24h)</h3>
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                            <div className="flex items-center gap-2">
+                                <span className="text-2xl">👥</span>
+                                <span className="text-gray-300">New Users</span>
+                            </div>
+                            <span className="text-blue-400 font-bold text-xl">{recent_activity.new_users_24h}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                            <div className="flex items-center gap-2">
+                                <span className="text-2xl">📄</span>
+                                <span className="text-gray-300">New Documents</span>
+                            </div>
+                            <span className="text-purple-400 font-bold text-xl">{recent_activity.new_documents_24h}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                            <div className="flex items-center gap-2">
+                                <span className="text-2xl">💬</span>
+                                <span className="text-gray-300">Queries</span>
+                            </div>
+                            <span className="text-green-400 font-bold text-xl">{recent_activity.queries_24h}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Storage Usage */}
+            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
+                <h3 className="text-lg font-bold text-white mb-4">Storage Usage</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/30 rounded-xl">
+                        <div className="text-sm text-blue-400 mb-1">Total Storage</div>
+                        <div className="text-2xl font-bold text-white">{storage.total_gb} GB</div>
+                        <div className="text-xs text-gray-400 mt-1">{formatBytes(storage.total_bytes)}</div>
+                    </div>
+                    <div className="p-4 bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl">
+                        <div className="text-sm text-purple-400 mb-1">Megabytes</div>
+                        <div className="text-2xl font-bold text-white">{storage.total_mb} MB</div>
+                    </div>
+                    <div className="p-4 bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30 rounded-xl">
+                        <div className="text-sm text-green-400 mb-1">Documents</div>
+                        <div className="text-2xl font-bold text-white">{database.total_documents}</div>
+                        <div className="text-xs text-gray-400 mt-1">Avg: {database.total_documents > 0 ? (storage.total_mb / database.total_documents).toFixed(2) : 0} MB/doc</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Last Updated */}
+            <div className="text-center text-sm text-gray-400">
+                Last updated: {new Date(healthData.timestamp).toLocaleString()}
+            </div>
+        </div>
+    )
+}
+
+// Edit User Modal Component
+function EditUserModal({ user, token, onClose, onSuccess }) {
+    const [formData, setFormData] = useState({
+        role: user.role || '',
+        institution: user.institution || '',
+        occupation: user.occupation || '',
+        admin_notes: user.admin_notes || ''
+    })
+    const [loading, setLoading] = useState(false)
+
+    const handleSubmit = async (e) => {
+        e.preventDefault()
+        setLoading(true)
+
+        try {
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/admin/users/${user.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            })
+            const data = await response.json()
+
+            if (data.success) {
+                toast.success(data.message)
+                onSuccess()
+            } else {
+                toast.error(data.message)
+            }
+        } catch (error) {
+            toast.error('Failed to update user')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    return (
+        <>
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={onClose}
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            />
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            >
+                <div className="bg-[#1e293b] rounded-2xl shadow-2xl border border-white/10 w-full max-w-md">
+                    <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 border-b border-white/10 px-6 py-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-bold text-white">Edit User</h2>
+                            <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
+                            <input
+                                type="text"
+                                value={user.email}
+                                disabled
+                                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-400 cursor-not-allowed"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">Role</label>
+                            <input
+                                type="text"
+                                value={formData.role}
+                                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="e.g., Student, Teacher, Researcher"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">Institution</label>
+                            <input
+                                type="text"
+                                value={formData.institution}
+                                onChange={(e) => setFormData({ ...formData, institution: e.target.value })}
+                                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="e.g., University name"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">Occupation</label>
+                            <input
+                                type="text"
+                                value={formData.occupation}
+                                onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
+                                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="e.g., Software Engineer"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">Admin Notes</label>
+                            <textarea
+                                value={formData.admin_notes}
+                                onChange={(e) => setFormData({ ...formData, admin_notes: e.target.value })}
+                                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                                placeholder="Internal notes about this user"
+                                rows={3}
+                            />
+                        </div>
+
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 rounded-lg text-white font-medium transition-all disabled:opacity-50"
+                            >
+                                {loading ? 'Saving...' : 'Save Changes'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </motion.div>
+        </>
+    )
+}
+
+// Ban User Modal Component
+function BanUserModal({ user, token, onClose, onSuccess }) {
+    const [reason, setReason] = useState('')
+    const [loading, setLoading] = useState(false)
+    const isBanned = user.is_active === false
+
+    const handleAction = async () => {
+        setLoading(true)
+
+        try {
+            const endpoint = isBanned ? 'unban' : 'ban'
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/admin/users/${user.id}/${endpoint}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: isBanned ? null : JSON.stringify({ reason })
+            })
+            const data = await response.json()
+
+            if (data.success) {
+                toast.success(data.message)
+                onSuccess()
+            } else {
+                toast.error(data.message)
+            }
+        } catch (error) {
+            toast.error(`Failed to ${isBanned ? 'unban' : 'ban'} user`)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    return (
+        <>
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={onClose}
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            />
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            >
+                <div className="bg-[#1e293b] rounded-2xl shadow-2xl border border-white/10 w-full max-w-md">
+                    <div className={`bg-gradient-to-r ${isBanned ? 'from-green-600/20 to-emerald-600/20' : 'from-orange-600/20 to-red-600/20'} border-b border-white/10 px-6 py-4`}>
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-bold text-white">{isBanned ? 'Unban User' : 'Ban User'}</h2>
+                            <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="p-6 space-y-4">
+                        <p className="text-gray-300">
+                            {isBanned
+                                ? `Are you sure you want to restore access for ${user.email}?`
+                                : `Are you sure you want to ban ${user.email}? They will lose access to the platform.`
+                            }
+                        </p>
+
+                        {!isBanned && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">Reason for ban</label>
+                                <textarea
+                                    value={reason}
+                                    onChange={(e) => setReason(e.target.value)}
+                                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
+                                    placeholder="Enter reason for banning this user..."
+                                    rows={3}
+                                    required
+                                />
+                            </div>
+                        )}
+
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleAction}
+                                disabled={loading || (!isBanned && !reason.trim())}
+                                className={`flex-1 px-4 py-2 ${isBanned ? 'bg-green-500 hover:bg-green-600' : 'bg-orange-500 hover:bg-orange-600'} rounded-lg text-white font-medium transition-all disabled:opacity-50`}
+                            >
+                                {loading ? 'Processing...' : isBanned ? 'Unban User' : 'Ban User'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </motion.div>
+        </>
+    )
+}
+
+// Generic Confirm Action Modal Component
+function ConfirmActionModal({ title, message, confirmText, confirmClass, onConfirm, onClose }) {
+    const [loading, setLoading] = useState(false)
+
+    const handleConfirm = async () => {
+        setLoading(true)
+        try {
+            await onConfirm()
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    return (
+        <>
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={onClose}
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            />
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            >
+                <div className="bg-[#1e293b] rounded-2xl shadow-2xl border border-white/10 w-full max-w-md">
+                    <div className="border-b border-white/10 px-6 py-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-bold text-white">{title}</h2>
+                            <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="p-6 space-y-4">
+                        <p className="text-gray-300">{message}</p>
+
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirm}
+                                disabled={loading}
+                                className={`flex-1 px-4 py-2 ${confirmClass} rounded-lg text-white font-medium transition-all disabled:opacity-50`}
+                            >
+                                {loading ? 'Processing...' : confirmText}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </motion.div>
+        </>
     )
 }
