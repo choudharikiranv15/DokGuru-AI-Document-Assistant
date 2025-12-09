@@ -63,17 +63,20 @@ const useAuthStore = create(
           const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-              redirectTo: window.location.origin + '/app',
+              redirectTo: `${window.location.origin}/app`,
               queryParams: {
                 access_type: 'offline',
                 prompt: 'consent',
               },
+              skipBrowserRedirect: false
             }
           });
 
           if (error) throw error;
+          // The redirect will happen automatically
           return { success: true };
         } catch (error) {
+          console.error("Google OAuth error:", error);
           return { success: false, message: error.message };
         }
       },
@@ -158,54 +161,141 @@ const useAuthStore = create(
       // Initialize auth on app load
       initializeAuth: async () => {
         set({ loading: true });
-        
-        // Check current session
-        const { data: { session } } = await supabase.auth.getSession();
 
-        if (session) {
-          const token = session.access_token;
-          api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          
-          try {
-            const response = await api.get('/auth/me');
-            if (response.data.success) {
-              set({ 
-                user: response.data.user, 
-                token, 
-                isAuthenticated: true,
-                loading: false 
-              });
-            }
-          } catch (error) {
-            console.error("Failed to refresh user data:", error);
-            // If backend fails (e.g. 401), maybe clear session?
-            // For now, keep session but maybe retry later.
-            set({ loading: false });
-          }
-        } else {
-            set({ 
-                user: null, 
-                token: null, 
-                isAuthenticated: false,
-                loading: false
+        try {
+          // Check current session
+          const { data: { session }, error } = await supabase.auth.getSession();
+
+          if (error) {
+            console.error("Error getting session:", error);
+            set({
+              user: null,
+              token: null,
+              isAuthenticated: false,
+              loading: false
             });
+            return;
+          }
+
+          if (session) {
+            const token = session.access_token;
+            api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+            try {
+              const response = await api.get('/auth/me');
+              if (response.data.success) {
+                set({
+                  user: response.data.user,
+                  token,
+                  isAuthenticated: true,
+                  loading: false
+                });
+              } else {
+                // Backend rejected the session
+                console.error("Backend rejected session:", response.data);
+                await supabase.auth.signOut();
+                set({
+                  user: null,
+                  token: null,
+                  isAuthenticated: false,
+                  loading: false
+                });
+              }
+            } catch (error) {
+              console.error("Failed to refresh user data:", error);
+              // If backend fails with 401, clear the session
+              if (error.response?.status === 401) {
+                await supabase.auth.signOut();
+                set({
+                  user: null,
+                  token: null,
+                  isAuthenticated: false,
+                  loading: false
+                });
+              } else {
+                // Other errors - keep trying
+                set({ loading: false });
+              }
+            }
+          } else {
+            set({
+              user: null,
+              token: null,
+              isAuthenticated: false,
+              loading: false
+            });
+          }
+        } catch (error) {
+          console.error("Error initializing auth:", error);
+          set({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+            loading: false
+          });
         }
 
-        // Listen for changes
-        supabase.auth.onAuthStateChange(async (_event, session) => {
-            if (session) {
-                const token = session.access_token;
-                api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-                // We could fetch profile here, but initializeAuth usually handles the initial load
-                // and login/signup handle the explicit actions. 
-                // This listener helps with token refreshes.
-                if (get().token !== token) {
-                    set({ token });
-                }
-            } else {
-                set({ user: null, token: null, isAuthenticated: false });
-                delete api.defaults.headers.common['Authorization'];
+        // Listen for auth state changes
+        supabase.auth.onAuthStateChange(async (event, session) => {
+          console.log("Auth state changed:", event, session ? "Session exists" : "No session");
+
+          if (event === 'SIGNED_IN' && session) {
+            const token = session.access_token;
+            const supabaseUser = session.user;
+            api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+            try {
+              // Try to get full profile from backend
+              const response = await api.get('/auth/me');
+              if (response.data.success) {
+                set({
+                  user: response.data.user,
+                  token,
+                  isAuthenticated: true,
+                  loading: false
+                });
+              } else {
+                // Fallback to Supabase user data
+                set({
+                  user: supabaseUser,
+                  token,
+                  isAuthenticated: true,
+                  loading: false
+                });
+              }
+            } catch (error) {
+              console.error("Failed to fetch user on SIGNED_IN:", error);
+              // Fallback to Supabase user data
+              set({
+                user: supabaseUser,
+                token,
+                isAuthenticated: true,
+                loading: false
+              });
             }
+          } else if (event === 'SIGNED_OUT') {
+            set({ user: null, token: null, isAuthenticated: false, loading: false });
+            delete api.defaults.headers.common['Authorization'];
+          } else if (event === 'TOKEN_REFRESHED' && session) {
+            const token = session.access_token;
+            api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            set({ token });
+          } else if (event === 'USER_UPDATED' && session) {
+            const token = session.access_token;
+            api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            try {
+              const response = await api.get('/auth/me');
+              if (response.data.success) {
+                set({
+                  user: response.data.user,
+                  token,
+                  isAuthenticated: true
+                });
+              }
+            } catch (error) {
+              console.error("Failed to fetch user on USER_UPDATED:", error);
+            }
+          }
         });
       }
     }),
@@ -213,6 +303,7 @@ const useAuthStore = create(
       name: 'auth-storage',
       partialize: (state) => ({
         user: state.user,
+        token: state.token,
         isAuthenticated: state.isAuthenticated
       })
     }
