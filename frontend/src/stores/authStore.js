@@ -3,6 +3,9 @@ import { persist } from 'zustand/middleware';
 import api from '../services/api';
 import { supabase } from '../services/supabaseClient';
 
+// Track if auth listener is already registered to prevent duplicates
+let authListenerRegistered = false;
+
 const useAuthStore = create(
   persist(
     (set, get) => ({
@@ -60,6 +63,10 @@ const useAuthStore = create(
       // Login with Google
       loginWithGoogle: async () => {
         try {
+          console.log("🚀 Starting Google OAuth flow...");
+          console.log("📍 Current origin:", window.location.origin);
+          console.log("📍 Redirect URL:", `${window.location.origin}/app`);
+
           const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
@@ -72,7 +79,12 @@ const useAuthStore = create(
             }
           });
 
-          if (error) throw error;
+          if (error) {
+            console.error("❌ OAuth initiation error:", error);
+            throw error;
+          }
+
+          console.log("✅ OAuth initiation successful, redirecting to Google...");
           // The redirect will happen automatically
           return { success: true };
         } catch (error) {
@@ -163,11 +175,19 @@ const useAuthStore = create(
         set({ loading: true });
 
         try {
+          // First, check if we're handling an OAuth callback
+          const hashParams = new URLSearchParams(window.location.hash.substring(1));
+          const queryParams = new URLSearchParams(window.location.search);
+
+          if (hashParams.has('access_token') || queryParams.has('code')) {
+            // Give Supabase a moment to process the callback
+            await new Promise(resolve => setTimeout(resolve, 1500));
+          }
+
           // Check current session
           const { data: { session }, error } = await supabase.auth.getSession();
 
           if (error) {
-            console.error("Error getting session:", error);
             set({
               user: null,
               token: null,
@@ -181,40 +201,45 @@ const useAuthStore = create(
             const token = session.access_token;
             api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
-            try {
-              const response = await api.get('/auth/me');
-              if (response.data.success) {
-                set({
-                  user: response.data.user,
-                  token,
-                  isAuthenticated: true,
-                  loading: false
-                });
-              } else {
-                // Backend rejected the session
-                console.error("Backend rejected session:", response.data);
-                await supabase.auth.signOut();
-                set({
-                  user: null,
-                  token: null,
-                  isAuthenticated: false,
-                  loading: false
-                });
-              }
-            } catch (error) {
-              console.error("Failed to refresh user data:", error);
-              // If backend fails with 401, clear the session
-              if (error.response?.status === 401) {
-                await supabase.auth.signOut();
-                set({
-                  user: null,
-                  token: null,
-                  isAuthenticated: false,
-                  loading: false
-                });
-              } else {
-                // Other errors - keep trying
-                set({ loading: false });
+            // Retry logic for fetching user profile (in case trigger is slow)
+            const maxRetries = 3;
+            let attempt = 0;
+            let success = false;
+
+            while (attempt < maxRetries && !success) {
+              try {
+                attempt++;
+
+                const response = await api.get('/auth/me');
+                if (response.data.success) {
+                  set({
+                    user: response.data.user,
+                    token,
+                    isAuthenticated: true,
+                    loading: false
+                  });
+                  success = true;
+                } else {
+                  throw new Error('Backend returned success: false');
+                }
+              } catch (error) {
+                // If it's a 404 and we have retries left, wait and try again (trigger might be slow)
+                if (error.response?.status === 404 && attempt < maxRetries) {
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  continue;
+                }
+
+                // If backend fails with 401 or we're out of retries, clear the session
+                if (error.response?.status === 401 || attempt >= maxRetries) {
+                  await supabase.auth.signOut();
+                  set({
+                    user: null,
+                    token: null,
+                    isAuthenticated: false,
+                    loading: false
+                  });
+                  success = true; // Exit loop
+                }
               }
             }
           } else {
@@ -226,7 +251,6 @@ const useAuthStore = create(
             });
           }
         } catch (error) {
-          console.error("Error initializing auth:", error);
           set({
             user: null,
             token: null,
@@ -235,11 +259,12 @@ const useAuthStore = create(
           });
         }
 
-        // Listen for auth state changes
-        supabase.auth.onAuthStateChange(async (event, session) => {
-          console.log("Auth state changed:", event, session ? "Session exists" : "No session");
+        // Listen for auth state changes (only register once)
+        if (!authListenerRegistered) {
+          authListenerRegistered = true;
+          supabase.auth.onAuthStateChange(async (event, session) => {
 
-          if (event === 'SIGNED_IN' && session) {
+            if (event === 'SIGNED_IN' && session) {
             const token = session.access_token;
             const supabaseUser = session.user;
             api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -293,10 +318,11 @@ const useAuthStore = create(
                 });
               }
             } catch (error) {
-              console.error("Failed to fetch user on USER_UPDATED:", error);
+              // Silent fail - user will see error on next action
             }
           }
-        });
+          });
+        }
       }
     }),
     {

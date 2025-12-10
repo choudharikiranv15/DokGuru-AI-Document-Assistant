@@ -45,14 +45,14 @@ export default function ChatInput({ setIsThinking }) {
 
     // Auto-save chat history
     const autoSaveChatHistory = async () => {
-        if (messages.length >= 2 && activeDocuments.length > 0 && !currentChatId) {
-            // Only auto-save if we have at least one Q&A pair and no existing chat ID
-            // Save with first active document's name
+        if (messages.length >= 2 && activeDocuments.length > 0) {
+            // Auto-save if we have at least one Q&A pair
+            // This will create a new chat if currentChatId doesn't exist, or update existing
             const firstDoc = activeDocuments[0]
             try {
                 await saveChatHistory(messages, firstDoc.name, firstDoc.id)
             } catch (error) {
-                console.error('Failed to auto-save chat:', error)
+                // Silent fail - will retry on next message
             }
         }
     }
@@ -298,7 +298,7 @@ export default function ChatInput({ setIsThinking }) {
         }
     }, [audioQueue, currentAudioIndex, isMuted, streamingMode, streamingComplete, totalExpectedAudio, isPlayingAudio])
 
-    const playNextAudio = () => {
+    const playNextAudio = async () => {
         if (currentAudioIndex >= audioQueue.length || isMuted || !audioRef.current) return
 
         const audioItem = audioQueue[currentAudioIndex]
@@ -310,13 +310,16 @@ export default function ChatInput({ setIsThinking }) {
         const fullUrl = audioItem.url.startsWith('http') ? audioItem.url : `${baseUrl}${audioItem.url}`
 
         audioRef.current.src = fullUrl
-        audioRef.current.play()
-            .catch(err => {
-                console.error('Audio play error:', err)
-                setIsPlayingAudio(false)
-                setBackgroundPlaying(false)
-                setCurrentAudioIndex(prev => prev + 1)
-            })
+
+        // Wait for audio to be ready before playing
+        try {
+            await audioRef.current.load() // Explicitly load the audio
+            await audioRef.current.play()
+        } catch (err) {
+            setIsPlayingAudio(false)
+            setBackgroundPlaying(false)
+            setCurrentAudioIndex(prev => prev + 1)
+        }
     }
 
     const handleAudioEnded = () => {
@@ -693,6 +696,12 @@ export default function ChatInput({ setIsThinking }) {
                     if (el) registerBackgroundAudio(el)
                 }}
                 onEnded={handleAudioEnded}
+                onError={(e) => {
+                    toast.error('Failed to load audio. Please try again.')
+                    setIsPlayingAudio(false)
+                    setBackgroundPlaying(false)
+                }}
+                preload="auto"
                 className="hidden"
             />
         </div>

@@ -78,13 +78,14 @@ export default function DocumentUpload({ variant = 'small' }) {
                 setStatusMessage(status.message)
             })
 
-            addDocument(result)
-
             // Refresh the document list from backend
             const fetchDocuments = useDocumentStore.getState().fetchDocuments
             await fetchDocuments()
 
-            toast.success(`Document processed in ${result.processingTime || '?'}s!`)
+            toast.success(`${file.name} processed successfully in ${result.processingTime || '?'}s!`, {
+                duration: 4000,
+                icon: '✅'
+            })
         } catch (error) {
             toast.error(error.message || 'Failed to upload document')
         } finally {

@@ -23,8 +23,15 @@ except ImportError:
 # ============= DEFERRED IMPORTS =============
 # Import only lightweight modules immediately
 # Heavy modules (ML, RAG, TTS, STT) imported inside functions to avoid slow startup
-from src.auth.jwt_handler import generate_jwt, verify_jwt
+from src.auth.jwt_handler import verify_jwt
+from supabase import create_client, Client
+
+# Force reload decorators to get latest changes
+import src.auth.decorators
+import importlib as _importlib
+_importlib.reload(src.auth.decorators)
 from src.auth.decorators import require_auth, require_admin
+
 from src.error_tracking import init_sentry, capture_exception, add_breadcrumb, set_user_context
 from sentry_sdk import set_context, set_user
 
@@ -38,6 +45,8 @@ import time
 import atexit
 import signal
 from functools import lru_cache
+import importlib
+import sys
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -346,6 +355,18 @@ app.config['UPLOAD_FOLDER'] = './data/pdfs'
 app.config['AUDIO_FOLDER'] = './data/audio'
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file upload
 
+# ============= SUPABASE ADMIN CLIENT =============
+# Initialize Supabase admin client for auth operations
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')  # This is the anon key
+SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY')  # Optional: for admin operations
+
+# Use service role key if available, otherwise use anon key
+supabase_admin: Client = create_client(
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY if SUPABASE_SERVICE_ROLE_KEY else SUPABASE_KEY
+)
+
 # Error handler for file size exceeded
 @app.errorhandler(413)
 def request_entity_too_large(error):
@@ -626,7 +647,7 @@ def voice_test():
 @app.route('/auth/signup', methods=['POST'])
 @limiter.limit("3 per hour")  # Prevent spam account creation
 def signup():
-    """User registration endpoint with role/occupation"""
+    """User registration endpoint with email verification via Supabase"""
     try:
         data = request.json
         email = data.get('email', '').strip().lower()
@@ -643,37 +664,80 @@ def signup():
         if len(password) < 6:
             return jsonify({'success': False, 'message': 'Password must be at least 6 characters'}), 400
 
-        # Check if user already exists
-        existing_user = db.get_user_by_email(email)
-        if existing_user:
-            return jsonify({'success': False, 'message': 'An account with this email already exists. Please log in instead.'}), 400
+        # Create user with Supabase Auth (this will send email verification automatically)
+        try:
+            auth_response = supabase_admin.auth.sign_up({
+                "email": email,
+                "password": password,
+                "options": {
+                    "data": {
+                        "display_name": display_name or email.split('@')[0],
+                        "role": role or "student",
+                        "institution": institution,
+                        "occupation": occupation
+                    }
+                }
+            })
 
-        # Hash password
-        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            if auth_response.user:
+                user_id = auth_response.user.id
 
-        # Create user
-        user = db.create_user(email, password_hash, role, institution, occupation, display_name)
+                # The trigger should create the user in public.users
+                # But let's ensure it exists with extended profile data
+                user = db.get_user_by_id(user_id)
+                if not user:
+                    # Fallback: create user if trigger failed
+                    logger.warning(f"Trigger didn't create user {user_id}, creating manually")
+                    user = db.create_user(email, None, role, institution, occupation, display_name)
+                    # Update the user ID to match Supabase auth
+                    db.client.table('users').update({'id': user_id}).eq('email', email).execute()
+                    user['id'] = user_id
+                elif role or institution or occupation:
+                    # Update extended profile fields if provided
+                    updates = {}
+                    if role:
+                        updates['role'] = role
+                    if institution:
+                        updates['institution'] = institution
+                    if occupation:
+                        updates['occupation'] = occupation
+                    if updates:
+                        db.update_user(user_id, updates)
 
-        # Generate JWT (new users are not admin by default)
-        token = generate_jwt(user['id'], user['email'], user.get('is_admin', False))
+                # Track signup event
+                analytics.track_signup(user_id, email, role)
+                add_breadcrumb('User signed up via Supabase', category='auth', data={'email': email, 'role': role})
 
-        # Track signup event
-        analytics.track_signup(user['id'], email, role)
-        add_breadcrumb('User signed up', category='auth', data={'email': email, 'role': role})
+                # Check if email confirmation is required
+                if not auth_response.session:
+                    return jsonify({
+                        'success': True,
+                        'message': 'Account created! Please check your email to verify your account before logging in.',
+                        'email_confirmation_required': True
+                    })
 
-        return jsonify({
-            'success': True,
-            'message': 'User created successfully',
-            'token': token,
-            'user': {
-                'id': user['id'],
-                'email': user['email'],
-                'role': user.get('role'),
-                'display_name': user.get('display_name'),
-                'is_admin': user.get('is_admin', False),
-                'institution': user.get('institution')
-            }
-        })
+                # If auto-confirmed, return session token
+                return jsonify({
+                    'success': True,
+                    'message': 'Account created successfully',
+                    'token': auth_response.session.access_token,
+                    'user': {
+                        'id': user_id,
+                        'email': email,
+                        'role': role,
+                        'display_name': display_name,
+                        'is_admin': False,
+                        'institution': institution
+                    }
+                })
+            else:
+                return jsonify({'success': False, 'message': 'Failed to create account'}), 500
+
+        except Exception as auth_error:
+            error_msg = str(auth_error)
+            if 'already registered' in error_msg.lower() or 'already exists' in error_msg.lower():
+                return jsonify({'success': False, 'message': 'An account with this email already exists. Please log in instead.'}), 400
+            raise auth_error
 
     except Exception as e:
         logger.error(f"Signup error: {str(e)}")
@@ -684,7 +748,7 @@ def signup():
 @app.route('/auth/login', methods=['GET', 'POST', 'OPTIONS'])
 @limiter.limit("5 per minute")  # Prevent brute force attacks
 def login():
-    """User login endpoint"""
+    """User login endpoint via Supabase Auth"""
     # Handle OPTIONS request (CORS preflight)
     if request.method == 'OPTIONS':
         return '', 204
@@ -707,44 +771,59 @@ def login():
         if not email or not password:
             return jsonify({'success': False, 'message': 'Email and password are required'}), 400
 
-        # Get user
-        user = db.get_user_by_email(email)
-        if not user:
-            return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
-
-        # Verify password
-        if not bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
-            return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
-
-        # Update last_login timestamp
+        # Sign in with Supabase
         try:
-            from datetime import datetime
-            db.client.table('users').update({
-                'last_login': datetime.utcnow().isoformat()
-            }).eq('id', user['id']).execute()
-        except Exception as e:
-            logger.warning(f"Failed to update last_login: {e}")
+            auth_response = supabase_admin.auth.sign_in_with_password({
+                "email": email,
+                "password": password
+            })
 
-        # Generate JWT with is_admin flag
-        token = generate_jwt(user['id'], user['email'], user.get('is_admin', False))
+            if auth_response.session and auth_response.user:
+                user_id = auth_response.user.id
 
-        # Track login event
-        analytics.track_login(user['id'], user['email'])
-        add_breadcrumb('User logged in', category='auth', data={'email': user['email']})
+                # Get full user profile from database
+                user = db.get_user_by_id(user_id)
+                if not user:
+                    # User exists in auth but not in public.users (trigger might have failed)
+                    logger.warning(f"User {user_id} exists in auth.users but not in public.users")
+                    return jsonify({'success': False, 'message': 'Account setup incomplete. Please contact support.'}), 500
 
-        return jsonify({
-            'success': True,
-            'message': 'Login successful',
-            'token': token,
-            'user': {
-                'id': user['id'],
-                'email': user['email'],
-                'display_name': user.get('display_name'),
-                'role': user.get('role'),
-                'is_admin': user.get('is_admin', False),
-                'is_verified': user.get('is_verified', False)
-            }
-        })
+                # Update last_login timestamp
+                try:
+                    from datetime import datetime
+                    db.client.table('users').update({
+                        'last_login': datetime.utcnow().isoformat()
+                    }).eq('id', user_id).execute()
+                except Exception as e:
+                    logger.warning(f"Failed to update last_login: {e}")
+
+                # Track login event
+                analytics.track_login(user_id, user['email'])
+                add_breadcrumb('User logged in via Supabase', category='auth', data={'email': user['email']})
+
+                return jsonify({
+                    'success': True,
+                    'message': 'Login successful',
+                    'token': auth_response.session.access_token,
+                    'user': {
+                        'id': user['id'],
+                        'email': user['email'],
+                        'display_name': user.get('display_name'),
+                        'role': user.get('role'),
+                        'is_admin': user.get('is_admin', False),
+                        'is_verified': user.get('is_verified', False)
+                    }
+                })
+            else:
+                return jsonify({'success': False, 'message': 'Login failed'}), 401
+
+        except Exception as auth_error:
+            error_msg = str(auth_error)
+            if 'invalid' in error_msg.lower() or 'credentials' in error_msg.lower():
+                return jsonify({'success': False, 'message': 'Invalid email or password'}), 401
+            elif 'not confirmed' in error_msg.lower() or 'verify' in error_msg.lower():
+                return jsonify({'success': False, 'message': 'Please verify your email before logging in. Check your inbox for the verification link.'}), 401
+            raise auth_error
 
     except Exception as e:
         logger.error(f"Login error: {str(e)}")
@@ -753,13 +832,118 @@ def login():
 
 
 @app.route('/auth/me', methods=['GET'])
+@limiter.limit("100 per minute")  # High limit for frequent auth checks
 @require_auth
 def get_current_user():
-    """Get current user information"""
+    """Get current user information - Creates user if missing (OAuth fallback)"""
+
     try:
         user = db.get_user_by_id(request.user_id)
+
         if not user:
-            return jsonify({'success': False, 'message': 'User not found'}), 404
+            # User exists in Supabase auth but not in public.users table
+            # This can happen if:
+            # 1. OAuth trigger failed or was slow
+            # 2. User was created directly in auth.users
+            # 3. ID mismatch between old custom auth and new Supabase auth
+            logger.warning(f"User {request.user_id} not found in public.users, checking for email match")
+
+            # Create user with info from JWT token
+            user_email = request.user_email or 'unknown@example.com'
+            display_name = user_email.split('@')[0]
+
+            # First, check if a user with this email already exists (ID mismatch scenario)
+            existing_user_by_email = db.get_user_by_email(user_email)
+
+            if existing_user_by_email:
+                # User exists but with wrong ID - this is from old custom auth
+                # We need to migrate the data to the new Supabase auth ID
+                logger.warning(f"Found user by email with different ID. Migrating from {existing_user_by_email['id']} to {request.user_id}")
+
+                try:
+                    old_id = existing_user_by_email['id']
+
+                    # Step 1: Update all foreign key references to use new ID
+                    # Update documents
+                    try:
+                        db.client.table('documents').update({'user_id': request.user_id}).eq('user_id', old_id).execute()
+                    except Exception as e:
+                        logger.warning(f"Failed to update documents: {e}")
+
+                    # Update chat_histories
+                    try:
+                        db.client.table('chat_histories').update({'user_id': request.user_id}).eq('user_id', old_id).execute()
+                    except Exception as e:
+                        logger.warning(f"Failed to update chat_histories: {e}")
+
+                    # Update feedback
+                    try:
+                        db.client.table('feedback').update({'user_id': request.user_id}).eq('user_id', old_id).execute()
+                    except Exception as e:
+                        logger.warning(f"Failed to update feedback: {e}")
+
+                    # Update site_feedback
+                    try:
+                        db.client.table('site_feedback').update({'user_id': request.user_id}).eq('user_id', old_id).execute()
+                    except Exception as e:
+                        logger.warning(f"Failed to update site_feedback: {e}")
+
+                    # Update user_voice_preferences
+                    try:
+                        db.client.table('user_voice_preferences').update({'user_id': request.user_id}).eq('user_id', old_id).execute()
+                    except Exception as e:
+                        logger.warning(f"Failed to update user_voice_preferences: {e}")
+
+                    # Update user_plans
+                    try:
+                        db.client.table('user_plans').update({'user_id': request.user_id}).eq('user_id', old_id).execute()
+                    except Exception as e:
+                        logger.warning(f"Failed to update user_plans: {e}")
+
+                    # Step 2: Delete the old user record
+                    db.client.table('users').delete().eq('id', old_id).execute()
+
+                    # Step 3: Create new user record with Supabase auth ID
+                    db.client.table('users').insert({
+                        'id': request.user_id,
+                        'email': user_email,
+                        'password_hash': None,  # Supabase auth manages passwords
+                        'display_name': existing_user_by_email.get('display_name', display_name),
+                        'role': existing_user_by_email.get('role', 'student'),
+                        'institution': existing_user_by_email.get('institution'),
+                        'occupation': existing_user_by_email.get('occupation'),
+                        'is_verified': True,  # Supabase auth users are verified
+                        'is_admin': existing_user_by_email.get('is_admin', False)
+                    }).execute()
+
+                    # Fetch the migrated user
+                    user = db.get_user_by_id(request.user_id)
+                    logger.info(f"Successfully migrated user from {old_id} to {request.user_id}")
+                except Exception as migrate_error:
+                    logger.error(f"Failed to migrate user: {migrate_error}")
+                    # If migration fails, just return the existing user data
+                    # The user can still access their account, just with the old ID
+                    existing_user_by_email['id'] = request.user_id
+                    user = existing_user_by_email
+            else:
+                # No user with this email - create new entry
+                try:
+                    db.client.table('users').insert({
+                        'id': request.user_id,
+                        'email': user_email,
+                        'password_hash': None,  # OAuth users don't have password
+                        'display_name': display_name,
+                        'role': 'student',  # Default role
+                        'is_verified': True,  # OAuth users are auto-verified
+                        'is_admin': False
+                    }).execute()
+
+                    # Fetch the newly created user
+                    user = db.get_user_by_id(request.user_id)
+                    logger.info(f"Successfully created fallback user entry for {user_email}")
+                except Exception as create_error:
+                    logger.error(f"Failed to create fallback user: {create_error}")
+                    return jsonify({'success': False, 'message': 'User not found and could not be created'}), 404
 
         return jsonify({
             'success': True,
@@ -1432,6 +1616,7 @@ def upload_pdf_async():
 
 
 @app.route('/upload-status/<job_id>', methods=['GET', 'OPTIONS'])
+@limiter.limit("200 per minute")  # Allow frequent polling for upload status
 @require_auth
 def get_upload_status(job_id):
     """

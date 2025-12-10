@@ -18,18 +18,25 @@ def require_auth(f):
         auth_header = request.headers.get('Authorization')
 
         if not auth_header:
+            print("[AUTH] No authorization header")
             return jsonify({"error": "No authorization header"}), 401
 
         # Extract token (format: "Bearer <token>")
         try:
             token = auth_header.split(' ')[1]
+            print(f"[AUTH] Token extracted (first 20 chars): {token[:20]}...")
         except IndexError:
+            print("[AUTH] Invalid authorization header format")
             return jsonify({"error": "Invalid authorization header format"}), 401
 
         # Verify token
+        print("[AUTH] Attempting to verify JWT...")
         payload = verify_jwt(token)
         if not payload:
+            print("[AUTH] JWT verification failed")
             return jsonify({"error": "Invalid or expired token"}), 401
+
+        print(f"[AUTH] JWT verified successfully for user: {payload.get('sub') or payload.get('user_id')}")
 
         # Add user info to request context
         # Supabase Auth uses 'sub', our custom auth used 'user_id'
