@@ -152,11 +152,14 @@ def cleanup_redis():
     """Cleanup Redis connection pool on app shutdown"""
     try:
         # Access the cache through the rag_system component if it's been initialized
-        rag = _components._instances.get('rag_system')
-        if rag and hasattr(rag, 'cache') and rag.cache:
-            logger.info("🧹 Closing Redis connections...")
-            rag.cache.close()
-            logger.info("✓ Redis connections closed")
+        # Use status check to avoid triggering lazy load during shutdown
+        status = _components.get_status().get('rag_system', {})
+        if status.get('initialized'):
+            rag = _components.get('rag_system')
+            if rag and hasattr(rag, 'cache') and rag.cache:
+                logger.info("🧹 Closing Redis connections...")
+                rag.cache.close()
+                logger.info("✓ Redis connections closed")
     except Exception as e:
         logger.error(f"Error closing Redis: {e}")
 

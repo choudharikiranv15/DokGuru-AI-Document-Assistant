@@ -362,7 +362,7 @@ function OverviewTab({ data, aiAnalytics }) {
                             { name: 'Documents', value: system.total_documents || 0 },
                             { name: 'Feedback', value: system.total_feedback || 0 },
                             { name: 'AI Responses', value: aiAnalytics?.total || 0 }
-                        ]}>
+                        ].filter(item => item.value !== undefined)}>
                             <defs>
                                 <linearGradient id="colorMetric" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8} />
@@ -373,7 +373,7 @@ function OverviewTab({ data, aiAnalytics }) {
                             <XAxis dataKey="name" stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
                             <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af' }} />
                             <Tooltip content={<CustomTooltip />} />
-                            <Area type="monotone" dataKey="value" stroke="#8b5cf6" fillOpacity={1} fill="url(#colorMetric)" />
+                            <Area type="monotone" dataKey="value" stroke="#8b5cf6" fillOpacity={1} fill="url(#colorMetric)" connectNulls />
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
