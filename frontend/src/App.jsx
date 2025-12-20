@@ -27,6 +27,7 @@ const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
 const TermsOfService = lazy(() => import('./pages/TermsOfService'))
 const About = lazy(() => import('./pages/About'))
 const Contact = lazy(() => import('./pages/Contact'))
+const LinearPreview = lazy(() => import('./pages/LinearPreview'))
 
 // Loading fallback component
 function PageLoader() {
@@ -228,6 +229,7 @@ function App() {
                     <Route path="/terms-of-service" element={<TermsOfService />} />
                     <Route path="/about" element={<About />} />
                     <Route path="/contact" element={<Contact />} />
+                    <Route path="/linear-preview" element={<LinearPreview />} />
 
                     <Route
                         path="/app"
