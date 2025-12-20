@@ -25,4 +25,30 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Auth Functions
+export const login = (credentials) => api.post('/auth/login', credentials);
+export const signup = (userData) => api.post('/auth/signup', userData);
+
+// Document Functions
+export const getDocuments = () => api.get('/documents');
+export const uploadDocument = (formData) => api.post('/upload', formData, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+});
+export const deleteDocument = (filename) => api.delete(`/documents/${filename}`);
+
+// Chat Functions
+export const askQuestion = async (question, documentNames, language = 'auto', history = []) => {
+  try {
+    const response = await api.post('/ask', {
+      question,
+      document_names: documentNames,
+      language,
+      history
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
 export default api;
