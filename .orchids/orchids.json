@@ -2,7 +2,7 @@
   "projectId": "documind-voice-setup",
   "createdAt": 1734691200000,
   "startupCommands": [
-    "cd frontend && npm run dev -- --port 5173 --host",
-    "cd backend && ..\\rag_env\\Scripts\\python app.py"
+    "cd frontend; npm run dev -- --port 5173 --host",
+    "cd backend; ..\\rag_env\\Scripts\\python app.py"
   ]
 }
