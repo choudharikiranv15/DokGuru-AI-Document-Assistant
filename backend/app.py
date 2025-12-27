@@ -717,6 +717,14 @@ def login():
         if not user:
             return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
 
+        # Check if user has a password set
+        if not user.get('password_hash'):
+            logger.warning(f"Login attempt for user with no password: {email}")
+            return jsonify({
+                'success': False,
+                'message': 'Account exists but password not set. Please use password reset or contact support.'
+            }), 401
+
         # Verify password
         if not bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
             return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
