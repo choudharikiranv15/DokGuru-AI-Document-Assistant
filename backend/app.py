@@ -757,9 +757,16 @@ def login():
             }
         })
 
+    except RuntimeError as e:
+        # Lazy loader component not initialized
+        logger.error(f"Login error - Component initialization failed: {str(e)}")
+        capture_exception(e, {'endpoint': 'login', 'error_type': 'RuntimeError'})
+        return jsonify({'success': False, 'message': 'Service temporarily unavailable. Please try again later.'}), 503
     except Exception as e:
-        logger.error(f"Login error: {str(e)}")
-        capture_exception(e, {'endpoint': 'login'})
+        # Log full exception details for debugging
+        import traceback
+        logger.error(f"Login error ({type(e).__name__}): {str(e)}\n{traceback.format_exc()}")
+        capture_exception(e, {'endpoint': 'login', 'error_type': type(e).__name__})
         return jsonify({'success': False, 'message': 'An error occurred during login. Please try again.'}), 500
 
 

@@ -79,7 +79,16 @@ class Database:
     """Database operations wrapper"""
 
     def __init__(self):
-        self.client = get_supabase_client()
+        try:
+            self.client = get_supabase_client()
+        except ValueError as e:
+            import logging
+            logging.error(f"Database initialization failed - Missing environment variables: {e}")
+            raise
+        except Exception as e:
+            import logging
+            logging.error(f"Database initialization failed: {e}")
+            raise
 
     def create_user(self, email: str, password_hash: str, role: str = None, institution: str = None, occupation: str = None) -> Dict[str, Any]:
         """Create a new user"""
@@ -108,19 +117,29 @@ class Database:
 
     def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get user by email"""
-        response = self.client.table('users').select('*').eq('email', email).execute()
+        try:
+            response = self.client.table('users').select('*').eq('email', email).execute()
 
-        if response.data and len(response.data) > 0:
-            return response.data[0]
-        return None
+            if response.data and len(response.data) > 0:
+                return response.data[0]
+            return None
+        except Exception as e:
+            import logging
+            logging.error(f"Database error fetching user by email: {e}")
+            raise  # Re-raise to let caller handle it
 
     def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get user by ID"""
-        response = self.client.table('users').select('*').eq('id', user_id).execute()
+        try:
+            response = self.client.table('users').select('*').eq('id', user_id).execute()
 
-        if response.data and len(response.data) > 0:
-            return response.data[0]
-        return None
+            if response.data and len(response.data) > 0:
+                return response.data[0]
+            return None
+        except Exception as e:
+            import logging
+            logging.error(f"Database error fetching user by ID {user_id}: {e}")
+            raise  # Re-raise to let caller handle it
 
     def update_user(self, user_id: str, updates: Dict[str, Any]) -> bool:
         """Update user fields"""
