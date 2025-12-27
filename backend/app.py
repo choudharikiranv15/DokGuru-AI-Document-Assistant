@@ -656,9 +656,16 @@ def signup():
         # Generate JWT (new users are not admin by default)
         token = generate_jwt(user['id'], user['email'], user.get('is_admin', False))
 
-        # Track signup event
-        analytics.track_signup(user['id'], email, role)
-        add_breadcrumb('User signed up', category='auth', data={'email': email, 'role': role})
+        # Track signup event (non-blocking)
+        try:
+            analytics.track_signup(user['id'], email, role)
+        except Exception as analytics_error:
+            logger.warning(f"Failed to track signup analytics: {analytics_error}")
+
+        try:
+            add_breadcrumb('User signed up', category='auth', data={'email': email, 'role': role})
+        except Exception as breadcrumb_error:
+            logger.warning(f"Failed to add breadcrumb: {breadcrumb_error}")
 
         return jsonify({
             'success': True,
@@ -726,9 +733,16 @@ def login():
         # Generate JWT with is_admin flag
         token = generate_jwt(user['id'], user['email'], user.get('is_admin', False))
 
-        # Track login event
-        analytics.track_login(user['id'], user['email'])
-        add_breadcrumb('User logged in', category='auth', data={'email': user['email']})
+        # Track login event (non-blocking)
+        try:
+            analytics.track_login(user['id'], user['email'])
+        except Exception as analytics_error:
+            logger.warning(f"Failed to track login analytics: {analytics_error}")
+
+        try:
+            add_breadcrumb('User logged in', category='auth', data={'email': user['email']})
+        except Exception as breadcrumb_error:
+            logger.warning(f"Failed to add breadcrumb: {breadcrumb_error}")
 
         return jsonify({
             'success': True,
@@ -803,7 +817,10 @@ def forgot_password():
             email_service.send_password_reset_email(email, reset_link)
 
             logger.info(f"Password reset requested for {email}")
-            add_breadcrumb('Password reset requested', category='auth', data={'email': email})
+            try:
+                add_breadcrumb('Password reset requested', category='auth', data={'email': email})
+            except Exception as e:
+                logger.warning(f"Failed to add breadcrumb: {e}")
 
         # Always return success (don't reveal if email exists)
         return jsonify({
@@ -840,7 +857,10 @@ def reset_password():
 
         if success:
             logger.info("Password reset successful")
-            add_breadcrumb('Password reset completed', category='auth')
+            try:
+                add_breadcrumb('Password reset completed', category='auth')
+            except Exception as e:
+                logger.warning(f"Failed to add breadcrumb: {e}")
             return jsonify({'success': True, 'message': message})
         else:
             return jsonify({'success': False, 'message': message}), 400
@@ -888,8 +908,14 @@ def change_password():
 
         if success:
             logger.info(f"Password changed successfully for user {request.user_id}")
-            add_breadcrumb('Password changed', category='auth', data={'user_id': request.user_id})
-            analytics.track_event(request.user_id, 'password_changed')
+            try:
+                add_breadcrumb('Password changed', category='auth', data={'user_id': request.user_id})
+            except Exception as e:
+                logger.warning(f"Failed to add breadcrumb: {e}")
+            try:
+                analytics.track_event(request.user_id, 'password_changed')
+            except Exception as e:
+                logger.warning(f"Failed to track analytics: {e}")
             return jsonify({'success': True, 'message': 'Password changed successfully'})
         else:
             return jsonify({'success': False, 'message': 'Failed to update password'}), 500
@@ -941,8 +967,14 @@ def change_email():
 
         if success:
             logger.info(f"Email changed successfully for user {request.user_id}")
-            add_breadcrumb('Email changed', category='auth', data={'user_id': request.user_id, 'new_email': new_email})
-            analytics.track_event(request.user_id, 'email_changed')
+            try:
+                add_breadcrumb('Email changed', category='auth', data={'user_id': request.user_id, 'new_email': new_email})
+            except Exception as e:
+                logger.warning(f"Failed to add breadcrumb: {e}")
+            try:
+                analytics.track_event(request.user_id, 'email_changed')
+            except Exception as e:
+                logger.warning(f"Failed to track analytics: {e}")
 
             # Generate new JWT with updated email
             token = generate_jwt(request.user_id, new_email)
@@ -1011,8 +1043,14 @@ def delete_account():
 
         if success:
             logger.info(f"Account deleted successfully for user {request.user_id}")
-            add_breadcrumb('Account deleted', category='auth', data={'user_id': request.user_id})
-            analytics.track_event(request.user_id, 'account_deleted')
+            try:
+                add_breadcrumb('Account deleted', category='auth', data={'user_id': request.user_id})
+            except Exception as e:
+                logger.warning(f"Failed to add breadcrumb: {e}")
+            try:
+                analytics.track_event(request.user_id, 'account_deleted')
+            except Exception as e:
+                logger.warning(f"Failed to track analytics: {e}")
 
             return jsonify({
                 'success': True,
@@ -1055,9 +1093,15 @@ def submit_feedback():
         )
 
         if success:
-            # Track feedback event
-            analytics.track_feedback(request.user_id, rating, bool(comment))
-            add_breadcrumb('Feedback submitted', category='feedback', data={'rating': rating})
+            # Track feedback event (non-blocking)
+            try:
+                analytics.track_feedback(request.user_id, rating, bool(comment))
+            except Exception as e:
+                logger.warning(f"Failed to track feedback analytics: {e}")
+            try:
+                add_breadcrumb('Feedback submitted', category='feedback', data={'rating': rating})
+            except Exception as e:
+                logger.warning(f"Failed to add breadcrumb: {e}")
 
             logger.info(f"Feedback submitted by user {request.user_id}: {rating}")
             return jsonify({'success': True, 'message': 'Feedback submitted successfully'})
@@ -1157,15 +1201,21 @@ def submit_site_feedback():
         success = db.save_site_feedback(feedback_data)
 
         if success:
-            # Track feedback event
-            analytics.track_event(user_id, 'site_feedback_submitted', {
-                'rating': overall_rating,
-                'type': feedback_type
-            })
-            add_breadcrumb('Site feedback submitted', category='feedback', data={
-                'type': feedback_type,
-                'rating': overall_rating
-            })
+            # Track feedback event (non-blocking)
+            try:
+                analytics.track_event(user_id, 'site_feedback_submitted', {
+                    'rating': overall_rating,
+                    'type': feedback_type
+                })
+            except Exception as e:
+                logger.warning(f"Failed to track feedback analytics: {e}")
+            try:
+                add_breadcrumb('Site feedback submitted', category='feedback', data={
+                    'type': feedback_type,
+                    'rating': overall_rating
+                })
+            except Exception as e:
+                logger.warning(f"Failed to add breadcrumb: {e}")
 
             logger.info(f"Site feedback submitted by user {user_id}: {feedback_type} ({overall_rating}/5)")
             return jsonify({
