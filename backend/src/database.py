@@ -8,8 +8,17 @@ from dotenv import load_dotenv
 import threading
 import time
 from functools import lru_cache
+import logging
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+
+# Custom exception for database errors
+class DatabaseError(Exception):
+    """Custom exception for database operation failures"""
+    pass
 
 # Thread-local storage for connection pooling
 _thread_local = threading.local()
@@ -116,7 +125,15 @@ class Database:
             raise Exception("An error occurred while creating the user account. Please try again.")
 
     def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
-        """Get user by email"""
+        """
+        Get user by email
+
+        Returns:
+            User dict if found, None if not found
+
+        Raises:
+            DatabaseError: If database query fails
+        """
         try:
             response = self.client.table('users').select('*').eq('email', email).execute()
 
@@ -124,12 +141,25 @@ class Database:
                 return response.data[0]
             return None
         except Exception as e:
-            import logging
-            logging.error(f"Database error fetching user by email: {e}")
-            raise  # Re-raise to let caller handle it
+            import traceback
+            # Log full details including stack trace for debugging
+            error_msg = f"Database error fetching user by email: {type(e).__name__}: {str(e)}"
+            logger.error(error_msg)
+            logger.error(f"Traceback: {traceback.format_exc()}")
+
+            # Raise custom exception to distinguish from "user not found"
+            raise DatabaseError(f"Failed to query user database: {str(e)}") from e
 
     def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """Get user by ID"""
+        """
+        Get user by ID
+
+        Returns:
+            User dict if found, None if not found
+
+        Raises:
+            DatabaseError: If database query fails
+        """
         try:
             response = self.client.table('users').select('*').eq('id', user_id).execute()
 
@@ -137,9 +167,14 @@ class Database:
                 return response.data[0]
             return None
         except Exception as e:
-            import logging
-            logging.error(f"Database error fetching user by ID {user_id}: {e}")
-            raise  # Re-raise to let caller handle it
+            import traceback
+            # Log full details including stack trace for debugging
+            error_msg = f"Database error fetching user by ID {user_id}: {type(e).__name__}: {str(e)}"
+            logger.error(error_msg)
+            logger.error(f"Traceback: {traceback.format_exc()}")
+
+            # Raise custom exception to distinguish from "user not found"
+            raise DatabaseError(f"Failed to query user database: {str(e)}") from e
 
     def update_user(self, user_id: str, updates: Dict[str, Any]) -> bool:
         """Update user fields"""

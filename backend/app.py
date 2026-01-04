@@ -712,8 +712,19 @@ def login():
         if not email or not password:
             return jsonify({'success': False, 'message': 'Email and password are required'}), 400
 
-        # Get user
-        user = db.get_user_by_email(email)
+        # Get user - handle database errors separately from "user not found"
+        try:
+            from src.database import DatabaseError
+            user = db.get_user_by_email(email)
+        except DatabaseError as db_error:
+            # Database connectivity or query error (e.g., postgrest validation errors)
+            logger.error(f"Database error during login for {email}: {db_error}")
+            capture_exception(db_error, {'endpoint': 'login', 'email': email})
+            return jsonify({
+                'success': False,
+                'message': 'Unable to process login request. Please try again in a moment.'
+            }), 503
+
         if not user:
             return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
 
@@ -822,8 +833,18 @@ def forgot_password():
                 'message': 'Too many password reset requests. Please try again later.'
             }), 429
 
-        # Generate reset token
-        token = password_reset_service.generate_reset_token(email)
+        # Generate reset token - handle database errors separately
+        try:
+            from src.database import DatabaseError
+            token = password_reset_service.generate_reset_token(email)
+        except DatabaseError as db_error:
+            # Database connectivity or query error (e.g., postgrest validation errors)
+            logger.error(f"Database error during password reset for {email}: {db_error}")
+            capture_exception(db_error, {'endpoint': 'forgot_password', 'email': email})
+            return jsonify({
+                'success': False,
+                'message': 'Unable to process password reset request. Please try again in a moment.'
+            }), 503
 
         if token:
             # Send reset email

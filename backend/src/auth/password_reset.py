@@ -6,9 +6,10 @@ import secrets
 import hashlib
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
-from src.database import get_supabase_client
+from src.database import get_supabase_client, DatabaseError
 from src.redis_cache import RedisCacheManager
 import logging
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,9 @@ class PasswordResetService:
 
         Returns:
             str: Reset token if user exists, None otherwise
+
+        Raises:
+            DatabaseError: If database query fails
         """
         try:
             # Check if user exists
@@ -58,8 +62,13 @@ class PasswordResetService:
             return token
 
         except Exception as e:
-            logger.error(f"Error generating reset token: {e}")
-            return None
+            # Log full details
+            error_msg = f"Error generating reset token: {type(e).__name__}: {str(e)}"
+            logger.error(error_msg)
+            logger.error(f"Traceback: {traceback.format_exc()}")
+
+            # Raise DatabaseError for postgrest/supabase errors
+            raise DatabaseError(f"Failed to process password reset request: {str(e)}") from e
 
     def validate_reset_token(self, token: str) -> Optional[str]:
         """
