@@ -43,7 +43,6 @@ const useAuthStore = create(
               return { success: true };
             }
           } catch (profileError) {
-            console.error("Error fetching profile:", profileError);
             // Fallback to basic user data if backend fetch fails
             set({ 
               user, 
@@ -63,10 +62,6 @@ const useAuthStore = create(
       // Login with Google
       loginWithGoogle: async () => {
         try {
-          console.log("🚀 Starting Google OAuth flow...");
-          console.log("📍 Current origin:", window.location.origin);
-          console.log("📍 Redirect URL:", `${window.location.origin}/app`);
-
           const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
@@ -80,15 +75,12 @@ const useAuthStore = create(
           });
 
           if (error) {
-            console.error("❌ OAuth initiation error:", error);
             throw error;
           }
 
-          console.log("✅ OAuth initiation successful, redirecting to Google...");
           // The redirect will happen automatically
           return { success: true };
         } catch (error) {
-          console.error("Google OAuth error:", error);
           return { success: false, message: error.message };
         }
       },
@@ -125,7 +117,7 @@ const useAuthStore = create(
                          occupation
                      });
                  } catch (e) {
-                     console.warn("Failed to update extended profile on signup", e);
+                     // Silent fail - profile will be updated later
                  }
              }
 
@@ -289,7 +281,6 @@ const useAuthStore = create(
                 });
               }
             } catch (error) {
-              console.error("Failed to fetch user on SIGNED_IN:", error);
               // Fallback to Supabase user data
               set({
                 user: supabaseUser,
