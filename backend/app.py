@@ -190,10 +190,12 @@ except Exception as e:
 # Content Security Policy to prevent XSS, clickjacking, etc.
 csp = {
     'default-src': "'self'",
-    'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'"],  # Allow React and inline scripts
+    'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'",
+                   'https://accounts.google.com',  # Google OAuth
+                   'https://*.supabase.co'],  # Supabase Auth
     'style-src': ["'self'", "'unsafe-inline'"],  # Allow inline styles and Tailwind
     'img-src': ["'self'", 'data:', 'https:', 'blob:'],  # Allow images from CDNs and data URIs
-    'font-src': ["'self'", 'data:'],
+    'font-src': ["'self'", 'data:', 'https://fonts.gstatic.com'],
     'connect-src': [
         "'self'",
         'https://api.groq.com',  # Groq LLM API
@@ -201,9 +203,19 @@ csp = {
         'https://*.upstash.io',  # Upstash Redis
         'https://*.sentry.io',  # Sentry error tracking
         'https://app.posthog.com',  # PostHog analytics
+        'https://accounts.google.com',  # Google OAuth
+        'https://*.run.app',  # Cloud Run backend
+        'https://dokguru.in',  # Production domain
+        'https://www.dokguru.in',  # Production domain (www)
     ],
     'media-src': ["'self'", 'blob:', 'data:'],  # Allow audio playback
     'worker-src': ["'self'", 'blob:'],  # Allow web workers
+    'frame-ancestors': ["'none'"],  # Prevent clickjacking - no iframes allowed
+    'base-uri': ["'self'"],  # Prevent base tag injection
+    'form-action': ["'self'", 'https://accounts.google.com'],  # Restrict form submissions
+    'frame-src': ["'none'"],  # Block all frames
+    'object-src': ["'none'"],  # Block plugins (Flash, Java, etc.)
+    'upgrade-insecure-requests': True,  # Automatically upgrade HTTP to HTTPS
 }
 
 # CORS Configuration - MUST be initialized BEFORE Talisman (non-fatal)

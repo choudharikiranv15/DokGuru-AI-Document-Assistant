@@ -5,11 +5,15 @@ import os
 import jwt
 import json
 import requests
+import logging
 from typing import Optional, Dict
+from datetime import datetime
 from dotenv import load_dotenv
 from jwt.algorithms import ECAlgorithm
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -17,6 +21,9 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 # Cache for JWKS
 _jwks_cache = None
 _public_key_cache = None
+
+# Track token usage for security monitoring
+_token_usage_tracker = {}
 
 
 def get_supabase_jwks():
@@ -64,7 +71,52 @@ def get_public_key_from_jwk(kid: str):
     return None
 
 
-def verify_jwt(token: str) -> Optional[Dict]:
+def check_suspicious_token_usage(user_id: str, ip_address: str = None) -> bool:
+    """
+    Check for suspicious token usage patterns
+
+    Args:
+        user_id: User ID from token payload
+        ip_address: Request IP address (optional)
+
+    Returns:
+        True if usage is suspicious, False otherwise
+    """
+    current_time = datetime.utcnow().timestamp()
+
+    if user_id not in _token_usage_tracker:
+        _token_usage_tracker[user_id] = {
+            'requests': [],
+            'ips': set()
+        }
+
+    tracker = _token_usage_tracker[user_id]
+
+    # Clean old requests (keep last 5 minutes)
+    tracker['requests'] = [req for req in tracker['requests'] if current_time - req < 300]
+
+    # Add current request
+    tracker['requests'].append(current_time)
+    if ip_address:
+        tracker['ips'].add(ip_address)
+
+    # Check for suspicious patterns
+
+    # 1. Too many requests in short time (>100 per minute)
+    recent_requests = [req for req in tracker['requests'] if current_time - req < 60]
+    if len(recent_requests) > 100:
+        logger.warning(f"Suspicious: High request rate for user {user_id}: {len(recent_requests)} req/min")
+        return True
+
+    # 2. Multiple IPs in short time (>3 IPs in 5 minutes)
+    if len(tracker['ips']) > 3:
+        logger.warning(f"Suspicious: Multiple IPs for user {user_id}: {len(tracker['ips'])} IPs")
+        return True
+
+    return False
+
+
+def verify_jwt(token: str, request_ip: str = None) -> Optional[Dict]:
     """Verify Supabase JWT token and return payload"""
 
     try:
@@ -77,7 +129,7 @@ def verify_jwt(token: str) -> Optional[Dict]:
         if algorithm == 'ES256' and kid:
             public_key = get_public_key_from_jwk(kid)
             if not public_key:
-                print(f"Could not find public key for kid: {kid}")
+                logger.error(f"Could not find public key for kid: {kid}")
                 return None
 
             try:
@@ -88,18 +140,25 @@ def verify_jwt(token: str) -> Optional[Dict]:
                     audience='authenticated',
                     options={"verify_aud": False}  # Supabase uses 'authenticated' audience
                 )
+
+                # Security monitoring: Check for suspicious usage
+                user_id = payload.get('sub')
+                if user_id and check_suspicious_token_usage(user_id, request_ip):
+                    logger.warning(f"Suspicious token usage detected for user: {user_id}")
+                    # Continue to allow request but log for monitoring
+
                 return payload
             except jwt.ExpiredSignatureError:
-                print("Token has expired")
+                logger.debug("Token has expired")
                 return None
             except jwt.InvalidTokenError as e:
-                print(f"Invalid token: {e}")
+                logger.warning(f"Invalid ES256 token: {e}")
                 return None
 
         # Fallback to HS256 for service role tokens or other scenarios
         elif algorithm == 'HS256':
             if not JWT_SECRET:
-                print("JWT_SECRET not configured for HS256 verification")
+                logger.error("JWT_SECRET not configured for HS256 verification")
                 return None
 
             try:
@@ -109,17 +168,23 @@ def verify_jwt(token: str) -> Optional[Dict]:
                     algorithms=['HS256'],
                     options={"verify_aud": False}
                 )
+
+                # Security monitoring for HS256 tokens too
+                user_id = payload.get('sub')
+                if user_id and check_suspicious_token_usage(user_id, request_ip):
+                    logger.warning(f"Suspicious token usage detected for user: {user_id}")
+
                 return payload
             except jwt.ExpiredSignatureError:
-                print("Token has expired")
+                logger.debug("Token has expired")
                 return None
             except jwt.InvalidTokenError as e:
-                print(f"Invalid token: {e}")
+                logger.warning(f"Invalid HS256 token: {e}")
                 return None
         else:
-            print(f"Unsupported algorithm: {algorithm}")
+            logger.error(f"Unsupported JWT algorithm: {algorithm}")
             return None
 
     except Exception as e:
-        print(f"Error verifying JWT: {e}")
+        logger.error(f"Error verifying JWT: {e}")
         return None
