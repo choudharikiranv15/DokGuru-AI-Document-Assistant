@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { motion } from 'framer-motion'
@@ -9,22 +9,37 @@ import BrowserWarning from './components/common/BrowserWarning'
 import OnboardingTutorial from './components/common/OnboardingTutorial'
 import FeedbackButton from './components/feedback/FeedbackButton'
 import ErrorBoundary from './components/common/ErrorBoundary'
-import Landing from './pages/Landing'
-import Login from './pages/Login'
-import Signup from './pages/Signup'
-import Profile from './pages/Profile'
-import ForgotPassword from './pages/ForgotPassword'
-import ResetPassword from './pages/ResetPassword'
-import AdminDashboard from './pages/AdminDashboard'
-import PrivacyPolicy from './pages/PrivacyPolicy'
-import TermsOfService from './pages/TermsOfService'
-import About from './pages/About'
-import Contact from './pages/Contact'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import useAuthStore from './stores/authStore'
 import { useChatHistoryStore } from './stores/chatHistoryStore'
 import { useDocumentStore } from './stores/documentStore'
 import toast from 'react-hot-toast'
+
+// Lazy load page components for code splitting
+const Landing = lazy(() => import('./pages/Landing'))
+const Login = lazy(() => import('./pages/Login'))
+const Signup = lazy(() => import('./pages/Signup'))
+const Profile = lazy(() => import('./pages/Profile'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
+const TermsOfService = lazy(() => import('./pages/TermsOfService'))
+const About = lazy(() => import('./pages/About'))
+const Contact = lazy(() => import('./pages/Contact'))
+const LinearPreview = lazy(() => import('./pages/LinearPreview'))
+
+// Loading fallback component
+function PageLoader() {
+    return (
+        <div className="flex items-center justify-center h-screen bg-[#0f172a]">
+            <div className="flex flex-col items-center gap-4">
+                <div className="w-12 h-12 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin"></div>
+                <p className="text-gray-400 text-sm">Loading...</p>
+            </div>
+        </div>
+    )
+}
 
 // New Chat Button Component
 function NewChatButton() {
@@ -82,15 +97,32 @@ function MainApp() {
     useEffect(() => {
         if (!hasLoadedHistory) {
             const loadData = async () => {
-                // First fetch documents, then chat histories
+                // First fetch documents
                 await fetchDocuments()
-                // Don't auto-load last chat - let user start fresh or choose
-                await fetchChatHistories(false) // false = don't auto-load
+
+                // Then fetch chat histories without auto-loading initially
+                await fetchChatHistories(false)
+
+                // Check limits and decide whether to load last chat
+                const state = useChatHistoryStore.getState()
+                const { chatHistories, canCreateNewChat, loadChatHistory } = state
+
+                // If limit reached, force load the last session
+                if (!canCreateNewChat() && chatHistories.length > 0) {
+                    const lastChat = chatHistories[0] // Assuming sorted by most recent
+                    await loadChatHistory(lastChat.id, true) // true = silent load
+                    toast.error('Chat limit reached. Loaded previous session. Upgrade to create new chats.', {
+                        icon: '🔒',
+                        duration: 5000
+                    })
+                }
+
                 setHasLoadedHistory(true)
             }
             loadData()
         }
-    }, [fetchDocuments, fetchChatHistories, hasLoadedHistory])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hasLoadedHistory]) // Only depend on hasLoadedHistory to prevent multiple calls
 
     return (
         <Layout>
@@ -184,45 +216,48 @@ function App() {
                     },
                 }}
             />
-            <Routes>
-                <Route path="/" element={<Landing />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/signup" element={<Signup />} />
-                <Route path="/forgot-password" element={<ForgotPassword />} />
-                <Route path="/reset-password" element={<ResetPassword />} />
+            <Suspense fallback={<PageLoader />}>
+                <Routes>
+                    <Route path="/" element={<Landing />} />
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/signup" element={<Signup />} />
+                    <Route path="/forgot-password" element={<ForgotPassword />} />
+                    <Route path="/reset-password" element={<ResetPassword />} />
 
-                {/* Legal & Info Pages */}
-                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-                <Route path="/terms-of-service" element={<TermsOfService />} />
-                <Route path="/about" element={<About />} />
-                <Route path="/contact" element={<Contact />} />
+                    {/* Legal & Info Pages */}
+                    <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                    <Route path="/terms-of-service" element={<TermsOfService />} />
+                    <Route path="/about" element={<About />} />
+                    <Route path="/contact" element={<Contact />} />
+                    <Route path="/linear-preview" element={<LinearPreview />} />
 
-                <Route
-                    path="/app"
-                    element={
-                        <ProtectedRoute>
-                            <MainApp />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/profile"
-                    element={
-                        <ProtectedRoute>
-                            <Profile />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/admin"
-                    element={
-                        <ProtectedRoute>
-                            <AdminDashboard />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+                    <Route
+                        path="/app"
+                        element={
+                            <ProtectedRoute>
+                                <MainApp />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/profile"
+                        element={
+                            <ProtectedRoute>
+                                <Profile />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/admin"
+                        element={
+                            <ProtectedRoute>
+                                <AdminDashboard />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+            </Suspense>
         </ErrorBoundary>
     )
 }

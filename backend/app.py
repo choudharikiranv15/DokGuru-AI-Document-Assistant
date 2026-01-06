@@ -23,8 +23,15 @@ except ImportError:
 # ============= DEFERRED IMPORTS =============
 # Import only lightweight modules immediately
 # Heavy modules (ML, RAG, TTS, STT) imported inside functions to avoid slow startup
-from src.auth.jwt_handler import generate_jwt, verify_jwt
+from src.auth.jwt_handler import verify_jwt
+from supabase import create_client, Client
+
+# Force reload decorators to get latest changes
+import src.auth.decorators
+import importlib as _importlib
+_importlib.reload(src.auth.decorators)
 from src.auth.decorators import require_auth, require_admin
+
 from src.error_tracking import init_sentry, capture_exception, add_breadcrumb, set_user_context
 from sentry_sdk import set_context, set_user
 
@@ -38,6 +45,8 @@ import time
 import atexit
 import signal
 from functools import lru_cache
+import importlib
+import sys
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -143,11 +152,14 @@ def cleanup_redis():
     """Cleanup Redis connection pool on app shutdown"""
     try:
         # Access the cache through the rag_system component if it's been initialized
-        rag = _components._instances.get('rag_system')
-        if rag and hasattr(rag, 'cache') and rag.cache:
-            logger.info("🧹 Closing Redis connections...")
-            rag.cache.close()
-            logger.info("✓ Redis connections closed")
+        # Use status check to avoid triggering lazy load during shutdown
+        status = _components.get_status().get('rag_system', {})
+        if status.get('initialized'):
+            rag = _components.get('rag_system')
+            if rag and hasattr(rag, 'cache') and rag.cache:
+                logger.info("🧹 Closing Redis connections...")
+                rag.cache.close()
+                logger.info("✓ Redis connections closed")
     except Exception as e:
         logger.error(f"Error closing Redis: {e}")
 
@@ -178,10 +190,12 @@ except Exception as e:
 # Content Security Policy to prevent XSS, clickjacking, etc.
 csp = {
     'default-src': "'self'",
-    'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'"],  # Allow React and inline scripts
+    'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'",
+                   'https://accounts.google.com',  # Google OAuth
+                   'https://*.supabase.co'],  # Supabase Auth
     'style-src': ["'self'", "'unsafe-inline'"],  # Allow inline styles and Tailwind
     'img-src': ["'self'", 'data:', 'https:', 'blob:'],  # Allow images from CDNs and data URIs
-    'font-src': ["'self'", 'data:'],
+    'font-src': ["'self'", 'data:', 'https://fonts.gstatic.com'],
     'connect-src': [
         "'self'",
         'https://api.groq.com',  # Groq LLM API
@@ -189,9 +203,19 @@ csp = {
         'https://*.upstash.io',  # Upstash Redis
         'https://*.sentry.io',  # Sentry error tracking
         'https://app.posthog.com',  # PostHog analytics
+        'https://accounts.google.com',  # Google OAuth
+        'https://*.run.app',  # Cloud Run backend
+        'https://dokguru.in',  # Production domain
+        'https://www.dokguru.in',  # Production domain (www)
     ],
     'media-src': ["'self'", 'blob:', 'data:'],  # Allow audio playback
     'worker-src': ["'self'", 'blob:'],  # Allow web workers
+    'frame-ancestors': ["'none'"],  # Prevent clickjacking - no iframes allowed
+    'base-uri': ["'self'"],  # Prevent base tag injection
+    'form-action': ["'self'", 'https://accounts.google.com'],  # Restrict form submissions
+    'frame-src': ["'none'"],  # Block all frames
+    'object-src': ["'none'"],  # Block plugins (Flash, Java, etc.)
+    'upgrade-insecure-requests': True,  # Automatically upgrade HTTP to HTTPS
 }
 
 # CORS Configuration - MUST be initialized BEFORE Talisman (non-fatal)
@@ -345,6 +369,18 @@ app.secret_key = os.getenv('SECRET_KEY')  # Required - validated above
 app.config['UPLOAD_FOLDER'] = './data/pdfs'
 app.config['AUDIO_FOLDER'] = './data/audio'
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file upload
+
+# ============= SUPABASE ADMIN CLIENT =============
+# Initialize Supabase admin client for auth operations
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')  # This is the anon key
+SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY')  # Optional: for admin operations
+
+# Use service role key if available, otherwise use anon key
+supabase_admin: Client = create_client(
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY if SUPABASE_SERVICE_ROLE_KEY else SUPABASE_KEY
+)
 
 # Error handler for file size exceeded
 @app.errorhandler(413)
@@ -626,7 +662,7 @@ def voice_test():
 @app.route('/auth/signup', methods=['POST'])
 @limiter.limit("3 per hour")  # Prevent spam account creation
 def signup():
-    """User registration endpoint with role/occupation"""
+    """User registration endpoint with email verification via Supabase"""
     try:
         data = request.json
         email = data.get('email', '').strip().lower()
@@ -634,6 +670,7 @@ def signup():
         role = data.get('role', '').strip()  # student, professional, researcher, other
         institution = data.get('institution', '').strip()
         occupation = data.get('occupation', '').strip()
+        display_name = data.get('display_name', '').strip()
 
         # Validation
         if not email or not password:
@@ -642,43 +679,80 @@ def signup():
         if len(password) < 6:
             return jsonify({'success': False, 'message': 'Password must be at least 6 characters'}), 400
 
-        # Check if user already exists
-        existing_user = db.get_user_by_email(email)
-        if existing_user:
-            return jsonify({'success': False, 'message': 'An account with this email already exists. Please log in instead.'}), 400
-
-        # Hash password
-        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-        # Create user
-        user = db.create_user(email, password_hash, role, institution, occupation)
-
-        # Generate JWT (new users are not admin by default)
-        token = generate_jwt(user['id'], user['email'], user.get('is_admin', False))
-
-        # Track signup event (non-blocking)
+        # Create user with Supabase Auth (this will send email verification automatically)
         try:
-            analytics.track_signup(user['id'], email, role)
-        except Exception as analytics_error:
-            logger.warning(f"Failed to track signup analytics: {analytics_error}")
+            auth_response = supabase_admin.auth.sign_up({
+                "email": email,
+                "password": password,
+                "options": {
+                    "data": {
+                        "display_name": display_name or email.split('@')[0],
+                        "role": role or "student",
+                        "institution": institution,
+                        "occupation": occupation
+                    }
+                }
+            })
 
-        try:
-            add_breadcrumb('User signed up', category='auth', data={'email': email, 'role': role})
-        except Exception as breadcrumb_error:
-            logger.warning(f"Failed to add breadcrumb: {breadcrumb_error}")
+            if auth_response.user:
+                user_id = auth_response.user.id
 
-        return jsonify({
-            'success': True,
-            'message': 'User created successfully',
-            'token': token,
-            'user': {
-                'id': user['id'],
-                'email': user['email'],
-                'role': user.get('role'),
-                'is_admin': user.get('is_admin', False),
-                'institution': user.get('institution')
-            }
-        })
+                # The trigger should create the user in public.users
+                # But let's ensure it exists with extended profile data
+                user = db.get_user_by_id(user_id)
+                if not user:
+                    # Fallback: create user if trigger failed
+                    logger.warning(f"Trigger didn't create user {user_id}, creating manually")
+                    user = db.create_user(email, None, role, institution, occupation, display_name)
+                    # Update the user ID to match Supabase auth
+                    db.client.table('users').update({'id': user_id}).eq('email', email).execute()
+                    user['id'] = user_id
+                elif role or institution or occupation:
+                    # Update extended profile fields if provided
+                    updates = {}
+                    if role:
+                        updates['role'] = role
+                    if institution:
+                        updates['institution'] = institution
+                    if occupation:
+                        updates['occupation'] = occupation
+                    if updates:
+                        db.update_user(user_id, updates)
+
+                # Track signup event
+                analytics.track_signup(user_id, email, role)
+                add_breadcrumb('User signed up via Supabase', category='auth', data={'email': email, 'role': role})
+
+                # Check if email confirmation is required
+                if not auth_response.session:
+                    return jsonify({
+                        'success': True,
+                        'message': 'Account created! Please check your email to verify your account before logging in.',
+                        'email_confirmation_required': True
+                    })
+
+                # If auto-confirmed, return session token
+                return jsonify({
+                    'success': True,
+                    'message': 'Account created successfully',
+                    'token': auth_response.session.access_token,
+                    'user': {
+                        'id': user_id,
+                        'email': email,
+                        'role': role,
+                        'display_name': display_name,
+                        'is_admin': False,
+                        'institution': institution
+                    }
+                })
+            else:
+                return jsonify({'success': False, 'message': 'Failed to create account'}), 500
+
+        except Exception as auth_error:
+            error_msg = str(auth_error)
+            if 'already registered' in error_msg.lower() or 'already exists' in error_msg.lower():
+                return jsonify({'success': False, 'message': 'An account with this email already exists. Please log in instead.'}), 400
+            raise auth_error
 
     except Exception as e:
         logger.error(f"Signup error: {str(e)}")
@@ -689,7 +763,7 @@ def signup():
 @app.route('/auth/login', methods=['GET', 'POST', 'OPTIONS'])
 @limiter.limit("5 per minute")  # Prevent brute force attacks
 def login():
-    """User login endpoint"""
+    """User login endpoint via Supabase Auth"""
     # Handle OPTIONS request (CORS preflight)
     if request.method == 'OPTIONS':
         return '', 204
@@ -712,97 +786,186 @@ def login():
         if not email or not password:
             return jsonify({'success': False, 'message': 'Email and password are required'}), 400
 
-        # Get user - handle database errors separately from "user not found"
+        # Sign in with Supabase
         try:
-            from src.database import DatabaseError
-            user = db.get_user_by_email(email)
-        except DatabaseError as db_error:
-            # Database connectivity or query error (e.g., postgrest validation errors)
-            logger.error(f"Database error during login for {email}: {db_error}")
-            capture_exception(db_error, {'endpoint': 'login', 'email': email})
-            return jsonify({
-                'success': False,
-                'message': 'Unable to process login request. Please try again in a moment.'
-            }), 503
+            auth_response = supabase_admin.auth.sign_in_with_password({
+                "email": email,
+                "password": password
+            })
 
-        if not user:
-            return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
+            if auth_response.session and auth_response.user:
+                user_id = auth_response.user.id
 
-        # Check if user has a password set
-        if not user.get('password_hash'):
-            logger.warning(f"Login attempt for user with no password: {email}")
-            return jsonify({
-                'success': False,
-                'message': 'Account exists but password not set. Please use password reset or contact support.'
-            }), 401
+                # Get full user profile from database
+                user = db.get_user_by_id(user_id)
+                if not user:
+                    # User exists in auth but not in public.users (trigger might have failed)
+                    logger.warning(f"User {user_id} exists in auth.users but not in public.users")
+                    return jsonify({'success': False, 'message': 'Account setup incomplete. Please contact support.'}), 500
 
-        # Verify password
-        if not bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
-            return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
+                # Update last_login timestamp
+                try:
+                    from datetime import datetime
+                    db.client.table('users').update({
+                        'last_login': datetime.utcnow().isoformat()
+                    }).eq('id', user_id).execute()
+                except Exception as e:
+                    logger.warning(f"Failed to update last_login: {e}")
 
-        # Update last_login timestamp
-        try:
-            from datetime import datetime
-            db.client.table('users').update({
-                'last_login': datetime.utcnow().isoformat()
-            }).eq('id', user['id']).execute()
-        except Exception as e:
-            logger.warning(f"Failed to update last_login: {e}")
+                # Track login event
+                analytics.track_login(user_id, user['email'])
+                add_breadcrumb('User logged in via Supabase', category='auth', data={'email': user['email']})
 
-        # Generate JWT with is_admin flag
-        token = generate_jwt(user['id'], user['email'], user.get('is_admin', False))
+                return jsonify({
+                    'success': True,
+                    'message': 'Login successful',
+                    'token': auth_response.session.access_token,
+                    'user': {
+                        'id': user['id'],
+                        'email': user['email'],
+                        'display_name': user.get('display_name'),
+                        'role': user.get('role'),
+                        'is_admin': user.get('is_admin', False),
+                        'is_verified': user.get('is_verified', False)
+                    }
+                })
+            else:
+                return jsonify({'success': False, 'message': 'Login failed'}), 401
 
-        # Track login event (non-blocking)
-        try:
-            analytics.track_login(user['id'], user['email'])
-        except Exception as analytics_error:
-            logger.warning(f"Failed to track login analytics: {analytics_error}")
+        except Exception as auth_error:
+            error_msg = str(auth_error)
+            if 'invalid' in error_msg.lower() or 'credentials' in error_msg.lower():
+                return jsonify({'success': False, 'message': 'Invalid email or password'}), 401
+            elif 'not confirmed' in error_msg.lower() or 'verify' in error_msg.lower():
+                return jsonify({'success': False, 'message': 'Please verify your email before logging in. Check your inbox for the verification link.'}), 401
+            raise auth_error
 
-        try:
-            add_breadcrumb('User logged in', category='auth', data={'email': user['email']})
-        except Exception as breadcrumb_error:
-            logger.warning(f"Failed to add breadcrumb: {breadcrumb_error}")
-
-        return jsonify({
-            'success': True,
-            'message': 'Login successful',
-            'token': token,
-            'user': {
-                'id': user['id'],
-                'email': user['email'],
-                'role': user.get('role'),
-                'is_admin': user.get('is_admin', False),
-                'is_verified': user.get('is_verified', False)
-            }
-        })
-
-    except RuntimeError as e:
-        # Lazy loader component not initialized
-        logger.error(f"Login error - Component initialization failed: {str(e)}")
-        capture_exception(e, {'endpoint': 'login', 'error_type': 'RuntimeError'})
-        return jsonify({'success': False, 'message': 'Service temporarily unavailable. Please try again later.'}), 503
     except Exception as e:
-        # Log full exception details for debugging
-        import traceback
-        logger.error(f"Login error ({type(e).__name__}): {str(e)}\n{traceback.format_exc()}")
-        capture_exception(e, {'endpoint': 'login', 'error_type': type(e).__name__})
+        logger.error(f"Login error: {str(e)}")
+        capture_exception(e, {'endpoint': 'login'})
         return jsonify({'success': False, 'message': 'An error occurred during login. Please try again.'}), 500
 
 
 @app.route('/auth/me', methods=['GET'])
+@limiter.limit("100 per minute")  # High limit for frequent auth checks
 @require_auth
 def get_current_user():
-    """Get current user information"""
+    """Get current user information - Creates user if missing (OAuth fallback)"""
+
     try:
         user = db.get_user_by_id(request.user_id)
+
         if not user:
-            return jsonify({'success': False, 'message': 'User not found'}), 404
+            # User exists in Supabase auth but not in public.users table
+            # This can happen if:
+            # 1. OAuth trigger failed or was slow
+            # 2. User was created directly in auth.users
+            # 3. ID mismatch between old custom auth and new Supabase auth
+            logger.warning(f"User {request.user_id} not found in public.users, checking for email match")
+
+            # Create user with info from JWT token
+            user_email = request.user_email or 'unknown@example.com'
+            display_name = user_email.split('@')[0]
+
+            # First, check if a user with this email already exists (ID mismatch scenario)
+            existing_user_by_email = db.get_user_by_email(user_email)
+
+            if existing_user_by_email:
+                # User exists but with wrong ID - this is from old custom auth
+                # We need to migrate the data to the new Supabase auth ID
+                logger.warning(f"Found user by email with different ID. Migrating from {existing_user_by_email['id']} to {request.user_id}")
+
+                try:
+                    old_id = existing_user_by_email['id']
+
+                    # Step 1: Update all foreign key references to use new ID
+                    # Update documents
+                    try:
+                        db.client.table('documents').update({'user_id': request.user_id}).eq('user_id', old_id).execute()
+                    except Exception as e:
+                        logger.warning(f"Failed to update documents: {e}")
+
+                    # Update chat_histories
+                    try:
+                        db.client.table('chat_histories').update({'user_id': request.user_id}).eq('user_id', old_id).execute()
+                    except Exception as e:
+                        logger.warning(f"Failed to update chat_histories: {e}")
+
+                    # Update feedback
+                    try:
+                        db.client.table('feedback').update({'user_id': request.user_id}).eq('user_id', old_id).execute()
+                    except Exception as e:
+                        logger.warning(f"Failed to update feedback: {e}")
+
+                    # Update site_feedback
+                    try:
+                        db.client.table('site_feedback').update({'user_id': request.user_id}).eq('user_id', old_id).execute()
+                    except Exception as e:
+                        logger.warning(f"Failed to update site_feedback: {e}")
+
+                    # Update user_voice_preferences
+                    try:
+                        db.client.table('user_voice_preferences').update({'user_id': request.user_id}).eq('user_id', old_id).execute()
+                    except Exception as e:
+                        logger.warning(f"Failed to update user_voice_preferences: {e}")
+
+                    # Update user_plans
+                    try:
+                        db.client.table('user_plans').update({'user_id': request.user_id}).eq('user_id', old_id).execute()
+                    except Exception as e:
+                        logger.warning(f"Failed to update user_plans: {e}")
+
+                    # Step 2: Delete the old user record
+                    db.client.table('users').delete().eq('id', old_id).execute()
+
+                    # Step 3: Create new user record with Supabase auth ID
+                    db.client.table('users').insert({
+                        'id': request.user_id,
+                        'email': user_email,
+                        'password_hash': None,  # Supabase auth manages passwords
+                        'display_name': existing_user_by_email.get('display_name', display_name),
+                        'role': existing_user_by_email.get('role', 'student'),
+                        'institution': existing_user_by_email.get('institution'),
+                        'occupation': existing_user_by_email.get('occupation'),
+                        'is_verified': True,  # Supabase auth users are verified
+                        'is_admin': existing_user_by_email.get('is_admin', False)
+                    }).execute()
+
+                    # Fetch the migrated user
+                    user = db.get_user_by_id(request.user_id)
+                    logger.info(f"Successfully migrated user from {old_id} to {request.user_id}")
+                except Exception as migrate_error:
+                    logger.error(f"Failed to migrate user: {migrate_error}")
+                    # If migration fails, just return the existing user data
+                    # The user can still access their account, just with the old ID
+                    existing_user_by_email['id'] = request.user_id
+                    user = existing_user_by_email
+            else:
+                # No user with this email - create new entry
+                try:
+                    db.client.table('users').insert({
+                        'id': request.user_id,
+                        'email': user_email,
+                        'password_hash': None,  # OAuth users don't have password
+                        'display_name': display_name,
+                        'role': 'student',  # Default role
+                        'is_verified': True,  # OAuth users are auto-verified
+                        'is_admin': False
+                    }).execute()
+
+                    # Fetch the newly created user
+                    user = db.get_user_by_id(request.user_id)
+                    logger.info(f"Successfully created fallback user entry for {user_email}")
+                except Exception as create_error:
+                    logger.error(f"Failed to create fallback user: {create_error}")
+                    return jsonify({'success': False, 'message': 'User not found and could not be created'}), 404
 
         return jsonify({
             'success': True,
             'user': {
                 'id': user['id'],
                 'email': user['email'],
+                'display_name': user.get('display_name'),
                 'is_admin': user.get('is_admin', False),
                 'role': user.get('role'),
                 'created_at': user['created_at'].isoformat() if hasattr(user['created_at'], 'isoformat') else str(user['created_at'])
@@ -833,18 +996,8 @@ def forgot_password():
                 'message': 'Too many password reset requests. Please try again later.'
             }), 429
 
-        # Generate reset token - handle database errors separately
-        try:
-            from src.database import DatabaseError
-            token = password_reset_service.generate_reset_token(email)
-        except DatabaseError as db_error:
-            # Database connectivity or query error (e.g., postgrest validation errors)
-            logger.error(f"Database error during password reset for {email}: {db_error}")
-            capture_exception(db_error, {'endpoint': 'forgot_password', 'email': email})
-            return jsonify({
-                'success': False,
-                'message': 'Unable to process password reset request. Please try again in a moment.'
-            }), 503
+        # Generate reset token
+        token = password_reset_service.generate_reset_token(email)
 
         if token:
             # Send reset email
@@ -853,10 +1006,7 @@ def forgot_password():
             email_service.send_password_reset_email(email, reset_link)
 
             logger.info(f"Password reset requested for {email}")
-            try:
-                add_breadcrumb('Password reset requested', category='auth', data={'email': email})
-            except Exception as e:
-                logger.warning(f"Failed to add breadcrumb: {e}")
+            add_breadcrumb('Password reset requested', category='auth', data={'email': email})
 
         # Always return success (don't reveal if email exists)
         return jsonify({
@@ -893,10 +1043,7 @@ def reset_password():
 
         if success:
             logger.info("Password reset successful")
-            try:
-                add_breadcrumb('Password reset completed', category='auth')
-            except Exception as e:
-                logger.warning(f"Failed to add breadcrumb: {e}")
+            add_breadcrumb('Password reset completed', category='auth')
             return jsonify({'success': True, 'message': message})
         else:
             return jsonify({'success': False, 'message': message}), 400
@@ -904,6 +1051,47 @@ def reset_password():
     except Exception as e:
         logger.error(f"Reset password error: {str(e)}")
         capture_exception(e, {'endpoint': 'reset_password'})
+        return jsonify({'success': False, 'message': 'An error occurred'}), 500
+
+
+@app.route('/auth/update-profile', methods=['PUT'])
+@require_auth
+def update_profile():
+    """Update user profile information"""
+    try:
+        user_id = request.user_id
+        data = request.json
+        
+        # Fields allowed to be updated
+        allowed_fields = ['display_name', 'full_name', 'phone_number', 'college_name', 'class_name', 'is_student']
+        updates = {k: v for k, v in data.items() if k in allowed_fields}
+        
+        if not updates:
+            return jsonify({'success': False, 'message': 'No valid fields to update'}), 400
+
+        success = db.update_user(user_id, updates)
+
+        if success:
+            # Return updated user data
+            updated_user = db.get_user_by_id(user_id)
+            return jsonify({
+                'success': True,
+                'message': 'Profile updated successfully',
+                'user': {
+                    'id': updated_user['id'],
+                    'email': updated_user['email'],
+                    'display_name': updated_user.get('display_name'),
+                    'role': updated_user.get('role'),
+                    'is_admin': updated_user.get('is_admin', False),
+                    'institution': updated_user.get('institution')
+                }
+            })
+        else:
+            return jsonify({'success': False, 'message': 'Failed to update profile'}), 500
+
+    except Exception as e:
+        logger.error(f"Update profile error: {str(e)}")
+        capture_exception(e, {'endpoint': 'update_profile'})
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
 
 
@@ -944,14 +1132,8 @@ def change_password():
 
         if success:
             logger.info(f"Password changed successfully for user {request.user_id}")
-            try:
-                add_breadcrumb('Password changed', category='auth', data={'user_id': request.user_id})
-            except Exception as e:
-                logger.warning(f"Failed to add breadcrumb: {e}")
-            try:
-                analytics.track_event(request.user_id, 'password_changed')
-            except Exception as e:
-                logger.warning(f"Failed to track analytics: {e}")
+            add_breadcrumb('Password changed', category='auth', data={'user_id': request.user_id})
+            analytics.track_event(request.user_id, 'password_changed')
             return jsonify({'success': True, 'message': 'Password changed successfully'})
         else:
             return jsonify({'success': False, 'message': 'Failed to update password'}), 500
@@ -1003,14 +1185,8 @@ def change_email():
 
         if success:
             logger.info(f"Email changed successfully for user {request.user_id}")
-            try:
-                add_breadcrumb('Email changed', category='auth', data={'user_id': request.user_id, 'new_email': new_email})
-            except Exception as e:
-                logger.warning(f"Failed to add breadcrumb: {e}")
-            try:
-                analytics.track_event(request.user_id, 'email_changed')
-            except Exception as e:
-                logger.warning(f"Failed to track analytics: {e}")
+            add_breadcrumb('Email changed', category='auth', data={'user_id': request.user_id, 'new_email': new_email})
+            analytics.track_event(request.user_id, 'email_changed')
 
             # Generate new JWT with updated email
             token = generate_jwt(request.user_id, new_email)
@@ -1079,14 +1255,8 @@ def delete_account():
 
         if success:
             logger.info(f"Account deleted successfully for user {request.user_id}")
-            try:
-                add_breadcrumb('Account deleted', category='auth', data={'user_id': request.user_id})
-            except Exception as e:
-                logger.warning(f"Failed to add breadcrumb: {e}")
-            try:
-                analytics.track_event(request.user_id, 'account_deleted')
-            except Exception as e:
-                logger.warning(f"Failed to track analytics: {e}")
+            add_breadcrumb('Account deleted', category='auth', data={'user_id': request.user_id})
+            analytics.track_event(request.user_id, 'account_deleted')
 
             return jsonify({
                 'success': True,
@@ -1129,15 +1299,9 @@ def submit_feedback():
         )
 
         if success:
-            # Track feedback event (non-blocking)
-            try:
-                analytics.track_feedback(request.user_id, rating, bool(comment))
-            except Exception as e:
-                logger.warning(f"Failed to track feedback analytics: {e}")
-            try:
-                add_breadcrumb('Feedback submitted', category='feedback', data={'rating': rating})
-            except Exception as e:
-                logger.warning(f"Failed to add breadcrumb: {e}")
+            # Track feedback event
+            analytics.track_feedback(request.user_id, rating, bool(comment))
+            add_breadcrumb('Feedback submitted', category='feedback', data={'rating': rating})
 
             logger.info(f"Feedback submitted by user {request.user_id}: {rating}")
             return jsonify({'success': True, 'message': 'Feedback submitted successfully'})
@@ -1237,21 +1401,15 @@ def submit_site_feedback():
         success = db.save_site_feedback(feedback_data)
 
         if success:
-            # Track feedback event (non-blocking)
-            try:
-                analytics.track_event(user_id, 'site_feedback_submitted', {
-                    'rating': overall_rating,
-                    'type': feedback_type
-                })
-            except Exception as e:
-                logger.warning(f"Failed to track feedback analytics: {e}")
-            try:
-                add_breadcrumb('Site feedback submitted', category='feedback', data={
-                    'type': feedback_type,
-                    'rating': overall_rating
-                })
-            except Exception as e:
-                logger.warning(f"Failed to add breadcrumb: {e}")
+            # Track feedback event
+            analytics.track_event(user_id, 'site_feedback_submitted', {
+                'rating': overall_rating,
+                'type': feedback_type
+            })
+            add_breadcrumb('Site feedback submitted', category='feedback', data={
+                'type': feedback_type,
+                'rating': overall_rating
+            })
 
             logger.info(f"Site feedback submitted by user {user_id}: {feedback_type} ({overall_rating}/5)")
             return jsonify({
@@ -1473,6 +1631,7 @@ def upload_pdf_async():
 
 
 @app.route('/upload-status/<job_id>', methods=['GET', 'OPTIONS'])
+@limiter.limit("200 per minute")  # Allow frequent polling for upload status
 @require_auth
 def get_upload_status(job_id):
     """
@@ -1504,6 +1663,72 @@ def get_upload_status(job_id):
         logger.error(f"Status check error: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
+
+@app.route('/documents/<document_name>/summary', methods=['GET'])
+@require_auth
+@limiter.limit("10 per hour")
+def get_document_summary(document_name):
+    """Get or generate a summary for a document"""
+    try:
+        user_id = request.user_id
+        # Decode document name if it was URL encoded
+        from urllib.parse import unquote
+        document_name = unquote(document_name)
+        
+        result = rag_system.summarize_document(document_name, user_id=user_id)
+        
+        if result.get('success'):
+            return jsonify(result)
+        else:
+            return jsonify(result), 404 if 'not found' in result.get('message', '').lower() else 500
+            
+    except Exception as e:
+        logger.error(f"Summary API error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/documents/<document_name>/flashcards', methods=['GET'])
+@require_auth
+@limiter.limit("10 per hour")
+def get_document_flashcards(document_name):
+    """Get or generate flashcards for a document"""
+    try:
+        user_id = request.user_id
+        from urllib.parse import unquote
+        document_name = unquote(document_name)
+        
+        result = rag_system.generate_flashcards(document_name, user_id=user_id)
+        
+        if result.get('success'):
+            return jsonify(result)
+        else:
+            return jsonify(result), 404 if 'not found' in result.get('message', '').lower() else 500
+            
+    except Exception as e:
+        logger.error(f"Flashcards API error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/documents/<document_name>/roadmap', methods=['GET'])
+@require_auth
+@limiter.limit("10 per hour")
+def get_document_roadmap(document_name):
+    """Get or generate a roadmap for a document"""
+    try:
+        user_id = request.user_id
+        from urllib.parse import unquote
+        document_name = unquote(document_name)
+        
+        result = rag_system.generate_roadmap(document_name, user_id=user_id)
+        
+        if result.get('success'):
+            return jsonify(result)
+        else:
+            return jsonify(result), 404 if 'not found' in result.get('message', '').lower() else 500
+            
+    except Exception as e:
+        logger.error(f"Roadmap API error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 # ============= END ASYNC UPLOAD ENDPOINTS =============
 
@@ -1631,7 +1856,8 @@ def ask_question():
                 'sources_used': response.get('sources_used', 0),
                 'confidence': response.get('confidence', 0),
                 'query_type': response.get('query_type', 'unknown'),
-                'cached': response.get('cached', False)
+                'cached': response.get('cached', False),
+                'sources': response.get('sources', [])
             },
             'limits': {
                 'queries_remaining': query_limit['remaining'],
@@ -1716,6 +1942,7 @@ def ask_question_stream():
                 audio_urls = []
                 tts_futures = {}  # {future: (sentence_id, sentence_text)}
                 pending_audio = queue.Queue()  # Thread-safe queue for completed audio
+                collected_sources = [] # Store sources to send in done event
 
                 def tts_worker(sentence_id, sentence_text, lang):
                     """Generate TTS in thread pool"""
@@ -1765,7 +1992,10 @@ def ask_question_stream():
                     for audio_result in check_completed_tts():
                         yield f"data: {json.dumps({'type': 'audio', 'sentence_id': audio_result['sentence_id'], 'audio_url': audio_result['audio_url'], 'duration': audio_result['duration']})}\n\n"
 
-                    if chunk_type == 'context':
+                    if chunk_type == 'sources':
+                        collected_sources = chunk.get('sources', [])
+
+                    elif chunk_type == 'context':
                         sources_used = chunk.get('sources_used', 0)
                         yield f"data: {json.dumps({'type': 'context', 'sources_used': sources_used})}\n\n"
 
@@ -1811,8 +2041,8 @@ def ask_question_stream():
                             except Exception as e:
                                 logger.warning(f"TTS completion error: {e}")
 
-                        # Send completion with all audio URLs
-                        yield f"data: {json.dumps({'type': 'done', 'full_response': full_response, 'sources_used': sources_used, 'total_sentences': sentence_count, 'audio_urls': audio_urls, 'provider': chunk.get('provider', 'unknown')})}\n\n"
+                        # Send completion with all audio URLs and sources
+                        yield f"data: {json.dumps({'type': 'done', 'full_response': full_response, 'sources_used': sources_used, 'sources': collected_sources, 'total_sentences': sentence_count, 'audio_urls': audio_urls, 'provider': chunk.get('provider', 'unknown')})}\n\n"
 
                         # Update conversation history
                         conversation_history.append(question)
@@ -3479,9 +3709,10 @@ def delete_chat_history(chat_id):
 
 @app.route('/chat-history/clear-all', methods=['DELETE'])
 @require_auth
-def clear_all_chat_histories(current_user):
+def clear_all_chat_histories():
     """Delete all chat histories for the current user"""
     try:
+        user_id = request.user_id
         success = db.delete_all_chat_histories(user_id)
 
         if success:
@@ -3495,9 +3726,10 @@ def clear_all_chat_histories(current_user):
 
 @app.route('/chat-history/search', methods=['GET'])
 @require_auth
-def search_chat_histories(current_user):
+def search_chat_histories():
     """Search chat histories by content"""
     try:
+        user_id = request.user_id
         query = request.args.get('q', '')
 
         if not query:
@@ -3517,9 +3749,10 @@ def search_chat_histories(current_user):
 
 @app.route('/chat-history/filter', methods=['GET'])
 @require_auth
-def filter_chat_histories(current_user):
+def filter_chat_histories():
     """Filter chat histories by date range"""
     try:
+        user_id = request.user_id
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
 
@@ -3540,9 +3773,10 @@ def filter_chat_histories(current_user):
 
 @app.route('/plan/limits', methods=['GET'])
 @require_auth
-def get_plan_limits_endpoint(current_user):
+def get_plan_limits_endpoint():
     """Get current user's plan limits and usage"""
     try:
+        user_id = request.user_id
         from src.plans_config import get_plan_limits
 
         # Get user plan

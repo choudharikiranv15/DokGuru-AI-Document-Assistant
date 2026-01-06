@@ -123,20 +123,27 @@ export const useChatHistoryStore = create((set, get) => ({
         }
 
         try {
-            const firstUserMessage = messages.find(m => m.role === 'user')?.text || 'New conversation'
+            const { currentChatId } = get()
 
-            // Create new chat history
-            const result = await api.createChatHistory(documentName, documentId, firstUserMessage)
+            if (currentChatId) {
+                // Update existing chat
+                await api.updateChatHistory(currentChatId, messages)
+                return { id: currentChatId }
+            } else {
+                // Create new chat history
+                const firstUserMessage = messages.find(m => m.role === 'user')?.text || 'New conversation'
+                const result = await api.createChatHistory(documentName, documentId, firstUserMessage)
 
-            // Update chat with messages
-            await api.updateChatHistory(result.chat.id, messages)
+                // Update chat with messages
+                await api.updateChatHistory(result.chat.id, messages)
 
-            // Refresh list
-            await get().fetchChatHistories()
+                // Refresh list
+                await get().fetchChatHistories()
 
-            set({ currentChatId: result.chat.id })
+                set({ currentChatId: result.chat.id })
 
-            return result.chat
+                return result.chat
+            }
         } catch (error) {
             toast.error(error.message || 'Failed to save chat history')
             throw error

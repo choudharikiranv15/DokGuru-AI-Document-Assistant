@@ -13,6 +13,14 @@ import azure.cognitiveservices.speech as speechsdk
 
 logger = logging.getLogger(__name__)
 
+# Audio compression library
+try:
+    from pydub import AudioSegment
+    PYDUB_AVAILABLE = True
+except ImportError:
+    PYDUB_AVAILABLE = False
+    logger.warning("pydub not available - WAV files will not be compressed to MP3")
+
 
 class AzureTTSHandler:
     """
@@ -101,7 +109,29 @@ class AzureTTSHandler:
             text_hash = hashlib.md5(text.encode()).hexdigest()[:8]
             output_filename = f"azure_{language}_{text_hash}"
 
-        output_path = os.path.join(self.output_dir, f"{output_filename}.wav")
+        # Use MP3 format if pydub is available, otherwise WAV
+        output_format = 'mp3' if PYDUB_AVAILABLE else 'wav'
+        final_output_path = os.path.join(self.output_dir, f"{output_filename}.{output_format}")
+
+        # Check cache first
+        if os.path.exists(final_output_path):
+            file_size = os.path.getsize(final_output_path)
+            if file_size > 100:
+                logger.info(f"Using cached Azure audio: {output_filename}.{output_format} ({file_size} bytes)")
+                duration = self._get_audio_duration(final_output_path, is_mp3=(output_format == 'mp3'))
+                return {
+                    'audio_path': final_output_path,
+                    'duration': duration,
+                    'text': text,
+                    'filename': f"{output_filename}.{output_format}",
+                    'language': language,
+                    'language_name': voice_config['name'],
+                    'engine': 'Azure Neural TTS (cached)',
+                    'voice': voice_config['voice']
+                }
+
+        # Azure SDK always outputs WAV, so we need a temp path
+        temp_wav_path = os.path.join(self.output_dir, f"{output_filename}_temp.wav")
 
         logger.info(f"Synthesizing with Azure TTS ({voice_config['name']}): {len(text)} characters")
 
@@ -115,8 +145,8 @@ class AzureTTSHandler:
             # Set voice
             speech_config.speech_synthesis_voice_name = voice_config['voice']
 
-            # Configure audio output
-            audio_config = speechsdk.audio.AudioOutputConfig(filename=output_path)
+            # Configure audio output (Azure SDK outputs WAV)
+            audio_config = speechsdk.audio.AudioOutputConfig(filename=temp_wav_path)
 
             # Create synthesizer
             synthesizer = speechsdk.SpeechSynthesizer(
@@ -140,16 +170,39 @@ class AzureTTSHandler:
 
             # Check result
             if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-                logger.info(f"✅ Azure TTS synthesis complete: {output_path}")
+                logger.info(f"✅ Azure TTS synthesis complete (WAV)")
+
+                # Convert WAV to MP3 for compression (reduces size by ~90%)
+                if PYDUB_AVAILABLE:
+                    try:
+                        wav_size = os.path.getsize(temp_wav_path)
+                        logger.info(f"Compressing WAV ({wav_size} bytes) to MP3...")
+                        audio = AudioSegment.from_wav(temp_wav_path)
+                        # Export as MP3 with 128kbps bitrate
+                        audio.export(final_output_path, format="mp3", bitrate="128k")
+                        mp3_size = os.path.getsize(final_output_path)
+                        compression_ratio = (1 - mp3_size / wav_size) * 100
+                        logger.info(f"Compressed to MP3: {mp3_size} bytes (saved {compression_ratio:.1f}%)")
+                        # Remove temporary WAV file
+                        os.remove(temp_wav_path)
+                    except Exception as e:
+                        logger.warning(f"MP3 conversion failed: {e}. Falling back to WAV.")
+                        os.rename(temp_wav_path, final_output_path.replace('.mp3', '.wav'))
+                        final_output_path = final_output_path.replace('.mp3', '.wav')
+                        output_format = 'wav'
+                else:
+                    # No pydub, use WAV directly
+                    os.rename(temp_wav_path, final_output_path)
 
                 # Get audio duration
-                duration = self._get_audio_duration(output_path)
+                is_mp3 = final_output_path.endswith('.mp3')
+                duration = self._get_audio_duration(final_output_path, is_mp3=is_mp3)
 
                 return {
-                    'audio_path': output_path,
+                    'audio_path': final_output_path,
                     'duration': duration,
                     'text': text,
-                    'filename': f"{output_filename}.wav",
+                    'filename': os.path.basename(final_output_path),
                     'language': language,
                     'language_name': voice_config['name'],
                     'engine': 'Azure Neural TTS',
@@ -183,20 +236,45 @@ class AzureTTSHandler:
             text = text.replace(old, new)
         return text
 
-    def _get_audio_duration(self, audio_path: str) -> float:
-        """Get duration of WAV audio file"""
+    def _get_audio_duration(self, audio_path: str, is_mp3: bool = False) -> float:
+        """Get duration of audio file (WAV or MP3)"""
+        # For MP3 files, try pydub first
+        if is_mp3 and PYDUB_AVAILABLE:
+            try:
+                audio = AudioSegment.from_mp3(audio_path)
+                duration = len(audio) / 1000.0  # pydub returns milliseconds
+                if duration > 0:
+                    return duration
+            except Exception as e:
+                logger.warning(f"Could not get MP3 duration with pydub: {e}")
+
+        # For WAV files, try reading WAV metadata
+        if not is_mp3:
+            try:
+                import wave
+                with wave.open(audio_path, 'r') as audio_file:
+                    frames = audio_file.getnframes()
+                    rate = audio_file.getframerate()
+                    duration = frames / float(rate)
+                    if duration > 0:
+                        return duration
+            except Exception as e:
+                logger.warning(f"Could not get WAV duration: {e}")
+
+        # Fallback: File size estimation
         try:
-            import wave
-            with wave.open(audio_path, 'r') as audio_file:
-                frames = audio_file.getnframes()
-                rate = audio_file.getframerate()
-                duration = frames / float(rate)
-                return duration
-        except Exception as e:
-            logger.warning(f"Could not get audio duration: {e}")
-            # Rough estimate: 150 words per minute
-            word_count = len(audio_path.split())
-            return (word_count / 150) * 60
+            file_size = os.path.getsize(audio_path)
+            if is_mp3 and file_size > 1000:
+                # MP3 at 128kbps: ~16KB per second
+                return file_size / 16000
+            elif not is_mp3 and file_size > 44:
+                # WAV estimation
+                return (file_size - 44) / 44100
+        except Exception:
+            pass
+
+        # Last resort: return minimum duration
+        return 3.0
 
     def get_available_voices(self) -> Dict[str, Dict]:
         """Get list of available voices"""

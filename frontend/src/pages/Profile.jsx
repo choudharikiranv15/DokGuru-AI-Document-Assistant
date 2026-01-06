@@ -11,7 +11,7 @@ import toast from 'react-hot-toast'
 
 export default function Profile() {
     const navigate = useNavigate()
-    const { user, logout } = useAuthStore()
+    const { user, logout, updateUser } = useAuthStore()
     const documents = useDocumentStore(state => state.documents)
     const messages = useChatStore(state => state.messages)
 
@@ -28,9 +28,24 @@ export default function Profile() {
     })
 
     const [personalInfo, setPersonalInfo] = useState({
+        displayName: user?.display_name || '',
         fullName: localStorage.getItem('full_name') || '',
         phoneNumber: localStorage.getItem('phone_number') || ''
     })
+
+    // Update personalInfo when user data loads
+    useEffect(() => {
+        if (user) {
+            setPersonalInfo(prev => ({
+                ...prev,
+                displayName: user.display_name || ''
+            }))
+            setEditPersonalInfo(prev => ({
+                ...prev,
+                displayName: user.display_name || ''
+            }))
+        }
+    }, [user])
 
     const [isEditingStudent, setIsEditingStudent] = useState(false)
     const [isEditingPersonal, setIsEditingPersonal] = useState(false)
@@ -40,7 +55,7 @@ export default function Profile() {
     useEffect(() => {
         // Calculate stats
         const queryCount = messages.filter(m => m.role === 'user').length
-        const memberSince = localStorage.getItem('user_created_at') || new Date().toISOString()
+        const memberSince = user?.created_at || localStorage.getItem('user_created_at') || new Date().toISOString()
 
         setUserStats({
             documentsUploaded: documents.length,
@@ -50,7 +65,7 @@ export default function Profile() {
                 year: 'numeric'
             })
         })
-    }, [documents, messages])
+    }, [documents, messages, user])
 
     const handleLogout = () => {
         logout()
@@ -58,8 +73,10 @@ export default function Profile() {
         navigate('/login')
     }
 
-    const userName = user?.email?.split('@')[0] || 'User'
-    const capitalizedName = userName.charAt(0).toUpperCase() + userName.slice(1)
+    // Use display name if available, otherwise fallback to email username
+    const displayName = user?.display_name || user?.email?.split('@')[0] || 'User'
+    // Capitalize only if it looks like a name (not an email part if display name is missing)
+    const capitalizedName = user?.display_name ? displayName : displayName.charAt(0).toUpperCase() + displayName.slice(1)
 
     const handleSaveStudentInfo = () => {
         localStorage.setItem('is_student', editStudentInfo.isStudent)
@@ -75,12 +92,39 @@ export default function Profile() {
         setIsEditingStudent(false)
     }
 
-    const handleSavePersonalInfo = () => {
-        localStorage.setItem('full_name', editPersonalInfo.fullName)
-        localStorage.setItem('phone_number', editPersonalInfo.phoneNumber)
-        setPersonalInfo(editPersonalInfo)
-        setIsEditingPersonal(false)
-        toast.success('Personal information updated!')
+    const handleSavePersonalInfo = async () => {
+        try {
+            // Update local storage for non-synced fields (legacy)
+            localStorage.setItem('full_name', editPersonalInfo.fullName)
+            localStorage.setItem('phone_number', editPersonalInfo.phoneNumber)
+            
+            // Call API to update profile (syncs display_name)
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/auth/update-profile`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${useAuthStore.getState().token}`
+                },
+                body: JSON.stringify({
+                    display_name: editPersonalInfo.displayName
+                })
+            })
+            
+            const data = await response.json()
+            
+            if (data.success) {
+                // Update store
+                updateUser({ display_name: editPersonalInfo.displayName })
+                setPersonalInfo(editPersonalInfo)
+                setIsEditingPersonal(false)
+                toast.success('Personal information updated!')
+            } else {
+                toast.error(data.message || 'Failed to update profile')
+            }
+        } catch (error) {
+            console.error('Profile update error:', error)
+            toast.error('Failed to update profile')
+        }
     }
 
     const handleCancelPersonalEdit = () => {

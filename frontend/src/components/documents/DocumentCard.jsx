@@ -6,7 +6,7 @@ export default function DocumentCard({ document }) {
     const activeDocuments = useDocumentStore(state => state.activeDocuments)
     const toggleDocumentActive = useDocumentStore(state => state.toggleDocumentActive)
     const removeDocument = useDocumentStore(state => state.removeDocument)
-
+    
     // Defensive check - ensure document is valid
     if (!document || typeof document !== 'object') {
         // Error logged server-side only
@@ -16,9 +16,6 @@ export default function DocumentCard({ document }) {
     // Extract values safely
     const docName = String(document.name || 'Unknown')
     const totalChunks = Number(document.total_chunks || 0)
-    const textChunks = Number(document.text_chunks || 0)
-    const tableChunks = Number(document.table_chunks || 0)
-    const imageChunks = Number(document.image_chunks || 0)
 
     const isActive = activeDocuments.some(doc => doc.name === docName)
 
@@ -111,7 +108,7 @@ export default function DocumentCard({ document }) {
                         </span>
                     </div>
                 </div>
-
+                
                 {/* Delete button */}
                 <motion.button
                     whileHover={{ scale: 1.1 }}

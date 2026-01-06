@@ -209,6 +209,172 @@ class RAGSystem:
             self.logger.error(f"Error extracting images: {e}", exc_info=True)
             return retrieval_results
 
+    def summarize_document(self, document_name: str, user_id: str = None) -> Dict[str, Any]:
+        """Generate a summary of a document"""
+        try:
+            self.logger.info(f"Generating summary for: {document_name} (user: {user_id})")
+            
+            # Check cache first
+            cache_key = f"summary:{document_name}"
+            cached_summary = self.cache.get_cached_query_result(cache_key, None, suffix=f"_{user_id}" if user_id else "")
+            if cached_summary:
+                self.logger.info("Returning cached summary")
+                return {'success': True, 'summary': cached_summary['summary']}
+
+            # Get document text
+            text = self.vector_store.get_document_text(document_name, user_id=user_id)
+            
+            if not text:
+                return {'success': False, 'message': 'Document not found or empty'}
+            
+            # Generate summary using LLM
+            summary = self.llm_handler.generate_summary(text)
+            
+            result = {'success': True, 'summary': summary}
+            
+            # Cache result (long TTL for summaries: 24h)
+            self.cache.cache_query_result(cache_key, None, result, ttl=86400, suffix=f"_{user_id}" if user_id else "")
+            
+            return result
+        except Exception as e:
+            self.logger.error(f"Summary generation failed: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def _get_page_image(self, pdf_path: str, page_num: int) -> str:
+        """Extract first image from page and return as base64 data URI"""
+        try:
+            import fitz
+            import base64
+            
+            doc = fitz.open(pdf_path)
+            if page_num < 1 or page_num > len(doc):
+                return None
+                
+            page = doc[page_num - 1] # 0-indexed
+            images = page.get_images(full=True)
+            
+            if not images:
+                return None
+                
+            # Get best image (largest) to avoid icons/logos
+            best_image = None
+            max_size = 0
+            
+            for img in images:
+                xref = img[0]
+                base_image = doc.extract_image(xref)
+                image_bytes = base_image["image"]
+                if len(image_bytes) > max_size:
+                    max_size = len(image_bytes)
+                    best_image = base_image
+            
+            if not best_image or max_size < 5000: # Ignore tiny images (< 5KB)
+                return None
+
+            image_bytes = best_image["image"]
+            image_ext = best_image["ext"]
+            
+            encoded_image = base64.b64encode(image_bytes).decode("utf-8")
+            return f"data:image/{image_ext};base64,{encoded_image}"
+            
+        except Exception as e:
+            self.logger.error(f"Error extracting image from page {page_num}: {e}")
+            return None
+
+    def generate_flashcards(self, document_name: str, user_id: str = None) -> Dict[str, Any]:
+        """Generate flashcards for a document"""
+        try:
+            self.logger.info(f"Generating flashcards for: {document_name} (user: {user_id})")
+            
+            # Check cache first
+            cache_key = f"flashcards:{document_name}"
+            cached_result = self.cache.get_cached_query_result(cache_key, None, suffix=f"_{user_id}" if user_id else "")
+            if cached_result:
+                self.logger.info("Returning cached flashcards")
+                return {'success': True, 'flashcards': cached_result['flashcards']}
+
+            # Get document text WITH page numbers
+            text = self.vector_store.get_document_text(document_name, user_id=user_id, with_page_numbers=True)
+            
+            if not text:
+                return {'success': False, 'message': 'Document not found or empty'}
+            
+            # Generate flashcards
+            flashcards = self.llm_handler.generate_flashcards(text)
+            
+            if not flashcards:
+                return {'success': False, 'message': 'Failed to generate flashcards'}
+
+            # Enrich with images from PDF
+            pdf_path = self._find_pdf_path(document_name, user_id)
+            
+            for card in flashcards:
+                image_found = False
+                # Try PDF extraction first
+                if pdf_path:
+                    page_num = card.get('page_number')
+                    if page_num:
+                        image_url = self._get_page_image(pdf_path, int(page_num))
+                        if image_url:
+                            card['image_url'] = image_url
+                            image_found = True
+                
+                # Fallback to Pollinations.ai
+                if not image_found:
+                    try:
+                        import urllib.parse
+                        # Create a prompt focused on the concept
+                        concept = card['front'][:60].replace('?', '').strip()
+                        # Use a simple, educational style prompt
+                        visual_prompt = f"educational minimalist illustration of {concept}, vector art style, white background"
+                        encoded = urllib.parse.quote(visual_prompt)
+                        # Use hash of front text for consistent seed
+                        seed = abs(hash(card['front'])) % 10000
+                        card['image_url'] = f"https://pollinations.ai/p/{encoded}?width=400&height=300&nologo=true&seed={seed}"
+                    except Exception as e:
+                        self.logger.warning(f"Failed to generate Pollinations URL: {e}")
+
+            result = {'success': True, 'flashcards': flashcards}
+            
+            # Cache result
+            self.cache.cache_query_result(cache_key, None, result, ttl=86400, suffix=f"_{user_id}" if user_id else "")
+            
+            return result
+        except Exception as e:
+            self.logger.error(f"Flashcard generation failed: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def generate_roadmap(self, document_name: str, user_id: str = None) -> Dict[str, Any]:
+        """Generate a roadmap/mindmap for a document"""
+        try:
+            self.logger.info(f"Generating roadmap for: {document_name} (user: {user_id})")
+            
+            # Check cache
+            cache_key = f"roadmap:{document_name}"
+            cached_result = self.cache.get_cached_query_result(cache_key, None, suffix=f"_{user_id}" if user_id else "")
+            if cached_result:
+                self.logger.info("Returning cached roadmap")
+                return {'success': True, 'roadmap': cached_result['roadmap']}
+
+            # Get document text
+            text = self.vector_store.get_document_text(document_name, user_id=user_id)
+            
+            if not text:
+                return {'success': False, 'message': 'Document not found or empty'}
+            
+            # Generate roadmap using LLM
+            roadmap = self.llm_handler.generate_roadmap(text)
+            
+            result = {'success': True, 'roadmap': roadmap}
+            
+            # Cache result
+            self.cache.cache_query_result(cache_key, None, result, ttl=86400, suffix=f"_{user_id}" if user_id else "")
+            
+            return result
+        except Exception as e:
+            self.logger.error(f"Roadmap generation failed: {e}")
+            return {'success': False, 'error': str(e)}
+
     def _find_pdf_path(self, document_name: str = None, user_id: str = None) -> str:
         """Find the PDF file path from uploaded documents"""
         try:
@@ -285,6 +451,13 @@ class RAGSystem:
                 conversation_history
             )
 
+            # Check if LLM used general knowledge (indicated by warning marker)
+            # If so, remove sources to avoid confusion
+            if response.get('answer', '').startswith('⚠️'):
+                self.logger.info("LLM used general knowledge - clearing sources from response")
+                response['sources'] = []
+                response['sources_used'] = 0
+
             # Add retrieval info
             response['query_type'] = retrieval_results['query_type']
             response['retrieval_stats'] = {
@@ -336,6 +509,69 @@ class RAGSystem:
             if document_names:
                 self.logger.info(f"Filtering to documents: {', '.join(document_names)}")
 
+            # Intent Detection: Check for specific commands
+            question_lower = question.lower().strip()
+            target_doc = document_names[0] if document_names and len(document_names) > 0 else None
+            
+            if target_doc:
+                # Construct source info for the single target document
+                # This ensures the frontend knows which document was used
+                single_source = [{
+                    'page': 'All',
+                    'document': target_doc,
+                    'text': f"Full document: {target_doc}"
+                }]
+
+                # 1. Summary
+                if 'summary' in question_lower or 'summarize' in question_lower:
+                    self.logger.info(f"Intent detected: Summary for {target_doc}")
+                    yield {'type': 'sources', 'sources': single_source}
+                    yield {'type': 'chunk', 'content': f"Generating summary for **{target_doc}**...\n\n"}
+                    
+                    summary_result = self.summarize_document(target_doc, user_id)
+                    if summary_result.get('success'):
+                        yield {'type': 'chunk', 'content': summary_result['summary']}
+                        yield {'type': 'done', 'full_response': summary_result['summary'], 'sources_used': 1, 'sources': single_source}
+                        return
+                    else:
+                         yield {'type': 'error', 'content': f"Failed to generate summary: {summary_result.get('error', 'Unknown error')}"}
+                         return
+                
+                # 2. Flashcards
+                elif 'flashcard' in question_lower:
+                    self.logger.info(f"Intent detected: Flashcards for {target_doc}")
+                    yield {'type': 'sources', 'sources': single_source}
+                    yield {'type': 'chunk', 'content': f"Creating flashcards for **{target_doc}**...\n\n"}
+                    
+                    fc_result = self.generate_flashcards(target_doc, user_id)
+                    if fc_result.get('success'):
+                        yield {'type': 'flashcards', 'data': fc_result['flashcards']}
+                        yield {'type': 'done', 'full_response': "Generated flashcards.", 'sources_used': 1, 'sources': single_source}
+                        return
+                    else:
+                        yield {'type': 'error', 'content': f"Failed to generate flashcards: {fc_result.get('error', 'Unknown error')}"}
+                        return
+
+                # 3. Roadmap
+                elif 'roadmap' in question_lower or 'mindmap' in question_lower or 'mind map' in question_lower:
+                    self.logger.info(f"Intent detected: Roadmap for {target_doc}")
+                    yield {'type': 'sources', 'sources': single_source}
+                    yield {'type': 'chunk', 'content': f"Drawing roadmap for **{target_doc}**...\n\n"}
+                    
+                    rm_result = self.generate_roadmap(target_doc, user_id)
+                    if rm_result.get('success'):
+                        mermaid_code = rm_result['roadmap']
+                        # Clean up markdown code blocks if present
+                        mermaid_code = mermaid_code.replace('```mermaid', '').replace('```', '').strip()
+                        
+                        content = f"### Roadmap: {target_doc}\n\n```mermaid\n{mermaid_code}\n```"
+                        yield {'type': 'chunk', 'content': content}
+                        yield {'type': 'done', 'full_response': content, 'sources_used': 1, 'sources': single_source}
+                        return
+                    else:
+                        yield {'type': 'error', 'content': f"Failed to generate roadmap: {rm_result.get('error', 'Unknown error')}"}
+                        return
+
             # Step 1: Retrieve relevant documents (non-streaming)
             retrieval_results = self.retriever.retrieve(
                 question, conversation_history, document_filter=document_names, user_id=user_id
@@ -353,6 +589,19 @@ class RAGSystem:
                 'type': 'context',
                 'sources_used': len(retrieval_results['results']),
                 'query_type': retrieval_results['query_type']
+            }
+
+            # Yield structured sources for citations
+            sources = []
+            for doc in retrieval_results['results'][:3]:
+                sources.append({
+                    'page': doc['metadata'].get('page_number', '?'),
+                    'document': doc['metadata'].get('document_name', 'Unknown'),
+                    'text': doc['content'][:150] + "..."
+                })
+            yield {
+                'type': 'sources',
+                'sources': sources
             }
 
             # Step 2: Prepare context for LLM

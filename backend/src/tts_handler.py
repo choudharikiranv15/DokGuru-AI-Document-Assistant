@@ -18,6 +18,14 @@ from typing import Dict, Any, Optional, Generator
 
 logger = logging.getLogger(__name__)
 
+# Audio compression library
+try:
+    from pydub import AudioSegment
+    PYDUB_AVAILABLE = True
+except ImportError:
+    PYDUB_AVAILABLE = False
+    logger.warning("pydub not available - WAV files will not be compressed to MP3")
+
 # Check if piper-tts Python library is available
 try:
     from piper import PiperVoice
@@ -139,19 +147,21 @@ class PiperTTSHandler:
                 text_hash = hashlib.md5(f"{text}{language}".encode()).hexdigest()[:8]
                 output_filename = f"piper_{language}_{text_hash}"
 
-            output_path = os.path.join(self.output_dir, f"{output_filename}.wav")
+            # Use MP3 format if pydub is available, otherwise WAV
+            output_format = 'mp3' if PYDUB_AVAILABLE else 'wav'
+            output_path = os.path.join(self.output_dir, f"{output_filename}.{output_format}")
 
             # Check cache
             if os.path.exists(output_path):
                 file_size = os.path.getsize(output_path)
                 if file_size > 100:  # Ensure cached file is valid
-                    logger.info(f"Using cached Piper audio: {output_filename}.wav ({file_size} bytes)")
-                    duration = self._get_audio_duration(output_path, text)
+                    logger.info(f"Using cached Piper audio: {output_filename}.{output_format} ({file_size} bytes)")
+                    duration = self._get_audio_duration(output_path, text, is_mp3=(output_format == 'mp3'))
                     return {
                         'audio_path': output_path,
                         'duration': duration,
                         'text': text,
-                        'filename': f"{output_filename}.wav",
+                        'filename': f"{output_filename}.{output_format}",
                         'language': language,
                         'engine': 'Piper TTS (cached)'
                     }
@@ -165,28 +175,53 @@ class PiperTTSHandler:
 
             logger.info(f"Synthesizing with Piper ({language}): {len(text)} characters")
 
-            # Synthesize using the Python library
-            with wave.open(output_path, 'wb') as wav_file:
+            # Synthesize to WAV first (Piper only outputs WAV)
+            temp_wav_path = os.path.join(self.output_dir, f"{output_filename}_temp.wav")
+            with wave.open(temp_wav_path, 'wb') as wav_file:
                 voice.synthesize_wav(text, wav_file)
 
-            # Verify file was created with content
-            if not os.path.exists(output_path):
+            # Verify WAV was created
+            if not os.path.exists(temp_wav_path):
                 raise Exception("Piper failed to create audio file")
 
-            file_size = os.path.getsize(output_path)
-            if file_size < 100:
-                raise Exception(f"Piper generated invalid audio ({file_size} bytes)")
+            wav_size = os.path.getsize(temp_wav_path)
+            if wav_size < 100:
+                raise Exception(f"Piper generated invalid audio ({wav_size} bytes)")
 
+            # Convert WAV to MP3 for compression (reduces size by ~90%)
+            if PYDUB_AVAILABLE:
+                try:
+                    logger.info(f"Compressing WAV ({wav_size} bytes) to MP3...")
+                    audio = AudioSegment.from_wav(temp_wav_path)
+                    # Export as MP3 with 128kbps bitrate (good quality, ~10x smaller than WAV)
+                    audio.export(output_path, format="mp3", bitrate="128k")
+                    mp3_size = os.path.getsize(output_path)
+                    compression_ratio = (1 - mp3_size / wav_size) * 100
+                    logger.info(f"Compressed to MP3: {mp3_size} bytes (saved {compression_ratio:.1f}%)")
+                    # Remove temporary WAV file
+                    os.remove(temp_wav_path)
+                except Exception as e:
+                    logger.warning(f"MP3 conversion failed: {e}. Falling back to WAV.")
+                    # If conversion fails, rename temp WAV as final output
+                    os.rename(temp_wav_path, output_path.replace('.mp3', '.wav'))
+                    output_path = output_path.replace('.mp3', '.wav')
+                    output_format = 'wav'
+            else:
+                # No pydub, use WAV directly
+                os.rename(temp_wav_path, output_path)
+
+            file_size = os.path.getsize(output_path)
             logger.info(f"Piper audio file created: {output_path}, size: {file_size} bytes")
 
             # Get duration with text fallback
-            duration = self._get_audio_duration(output_path, text)
+            is_mp3 = output_path.endswith('.mp3')
+            duration = self._get_audio_duration(output_path, text, is_mp3=is_mp3)
 
             result = {
                 'audio_path': output_path,
                 'duration': duration,
                 'text': text,
-                'filename': f"{output_filename}.wav",
+                'filename': os.path.basename(output_path),
                 'language': language,
                 'voice': self.VOICE_CONFIG[language]['model'],
                 'engine': 'Piper TTS'
@@ -199,23 +234,40 @@ class PiperTTSHandler:
             logger.error(f"Piper TTS error: {e}")
             raise Exception(f"Failed to synthesize with Piper: {str(e)}")
 
-    def _get_audio_duration(self, audio_path: str, text: str = None) -> float:
-        """Get duration of WAV audio file in seconds with fallbacks."""
-        # Try reading WAV metadata
-        try:
-            with wave.open(audio_path, 'r') as wav_file:
-                frames = wav_file.getnframes()
-                rate = wav_file.getframerate()
-                duration = frames / float(rate)
+    def _get_audio_duration(self, audio_path: str, text: str = None, is_mp3: bool = False) -> float:
+        """Get duration of audio file in seconds with fallbacks."""
+        # For MP3 files, try pydub first
+        if is_mp3 and PYDUB_AVAILABLE:
+            try:
+                audio = AudioSegment.from_mp3(audio_path)
+                duration = len(audio) / 1000.0  # pydub returns milliseconds
                 if duration > 0:
                     return duration
-        except Exception as e:
-            logger.warning(f"Could not get WAV duration: {e}")
+            except Exception as e:
+                logger.warning(f"Could not get MP3 duration with pydub: {e}")
 
-        # Fallback: File size based estimation (WAV at 22050Hz, 16-bit mono = ~44100 bytes/sec)
+        # For WAV files, try reading WAV metadata
+        if not is_mp3:
+            try:
+                with wave.open(audio_path, 'r') as wav_file:
+                    frames = wav_file.getnframes()
+                    rate = wav_file.getframerate()
+                    duration = frames / float(rate)
+                    if duration > 0:
+                        return duration
+            except Exception as e:
+                logger.warning(f"Could not get WAV duration: {e}")
+
+        # Fallback: File size based estimation
         try:
             file_size = os.path.getsize(audio_path)
-            if file_size > 44:  # Skip WAV header
+            if is_mp3 and file_size > 1000:
+                # MP3 at 128kbps: ~16KB per second
+                estimated = file_size / 16000
+                if estimated > 0.5:
+                    return estimated
+            elif not is_mp3 and file_size > 44:
+                # WAV at 22050Hz, 16-bit mono = ~44100 bytes/sec
                 estimated = (file_size - 44) / 44100
                 if estimated > 0.5:
                     return estimated

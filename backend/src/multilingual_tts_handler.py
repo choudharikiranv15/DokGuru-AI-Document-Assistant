@@ -178,14 +178,13 @@ class MultilingualTTSHandler:
         # Determine which TTS engine will be used based on language and availability
         # This logic mirrors the synthesize() method's engine selection
 
-        # Piper TTS (WAV format) - for English and Hindi if available
+        # Piper TTS - for English and Hindi if available
         if language in self.piper_languages and self.piper_available:
-            return '.wav'
+            # Check if Piper uses MP3 (requires pydub)
+            from src.tts_handler import PYDUB_AVAILABLE
+            return '.mp3' if PYDUB_AVAILABLE else '.wav'
 
-        # All other engines use MP3 format:
-        # - Google Cloud TTS: .mp3
-        # - EdgeTTS: .mp3
-        # - gTTS: .mp3
+        # All other engines use MP3 format
         return '.mp3'
 
     def synthesize(self, text: str, language: str = 'auto', output_filename: Optional[str] = None,
